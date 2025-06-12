@@ -1,0 +1,10 @@
+Blackjack:
+	-dogs playing blackjack
+	-graphics
+		-need a graphics library
+		-green table from above
+		-cards appear on the table
+	-game design
+		-blackjack cheater
+		-card counter for statistics
+		-
