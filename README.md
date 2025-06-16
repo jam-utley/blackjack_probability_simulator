@@ -1,5 +1,5 @@
 # blackjack_probability_simulator
-Group project for EC 327 at Boston University. Simulates blackjack with variable number of decks.
+Group project for EC 327 at Boston University. This game assists you playing blackjack; it does not actually play blackjack. It calculates probabilities of busting or winning based off of the cards in play and cards already been played.
 
 Team Project 
 ------------
