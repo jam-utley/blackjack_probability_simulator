@@ -13,6 +13,8 @@ fn main() {
     let hand = ["five".to_string(), "seven".into()];
     let dealer_hand = ["king".to_string()];
 
+
+
     
     let mut card_counts = vec![4*num_decks; 13]; // number of cards remaining in order
 
@@ -32,13 +34,13 @@ fn main() {
         card_counts[index] -= 1;
     }
 
-    
-
 
     // temporary prints to track
     println!("{:?}", card_counts);
     println!("Current player hand: {}\nDealer hand: {}", curr_hand, curr_dealer_hand);
+     probability_chosen_card(4,curr_hand,&card_vals,&mut card_counts);
 }
+
 
 
 // function matching the names of the cards to the value vector and counts-tracking vector
@@ -62,6 +64,35 @@ fn card_index(card: &str) -> usize {
 }
 
 
+
+//if you chose this num, fn to provide the probability of busting 
+//Args
+// `val`: value of the card 
+fn probability_chosen_card(
+    val: i32,
+    curr_hand: i32,
+    card_vals: &Vec<i32>,
+    card_counts: &mut Vec<i32>,
+){
+      //calculate of a player getting a bust 
+    if let Some(index) = card_vals.iter().position(|&x| x == val) {
+        let mut temp_hand = curr_hand + card_vals[index];
+        if card_counts[index] > 0 {
+            card_counts[index] -= 1;
+        }
+    println!("{:?}", card_counts);
+    let mut remaining_bust_nums: f64 = 0.0;
+    let total_remaining_deck: i32 = card_counts.iter().sum();  //total remaining cards 
+     for (i, &val) in card_vals.iter().enumerate(){ //loop to get val and its current index 
+        if val > 21 - temp_hand && card_counts[i] > 0{ //check if val greater than 
+          //  println!("Probability of drawing that a {}: {:.2}", card_names[i], card_counts[i] as f64/total_remaining_deck as f64);
+            remaining_bust_nums  +=  card_counts[i] as f64
+    }
+}
+    println!("{:.2}", remaining_bust_nums/total_remaining_deck as f64);
+
+}
+}
 
 
 
