@@ -1,0 +1,10 @@
+[package]
+name = "blackjack_probability_simulator"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+
+[[bin]]
+name = "blackjack_probability_simulator"
+path = "main.rs"
