@@ -38,7 +38,7 @@ fn main() {
     // temporary prints to track
     println!("{:?}", card_counts);
     println!("Current player hand: {}\nDealer hand: {}", curr_hand, curr_dealer_hand);
-     probability_chosen_card(4,curr_hand,&card_vals,&mut card_counts);
+     probability_busting(4,curr_hand,&card_vals,&mut card_counts);
 }
 
 
@@ -65,10 +65,14 @@ fn card_index(card: &str) -> usize {
 
 
 
+
 //if you chose this num, fn to provide the probability of busting 
 //Args
 // `val`: value of the card 
-fn probability_chosen_card(
+//'curr_hand' - total current hand
+//'card_Val' - vector of card values with faces and numbers
+//'card_counts' - 'card counts which holds how many total cards in the vector remaining
+fn probability_busting(
     val: i32,
     curr_hand: i32,
     card_vals: &Vec<i32>,
@@ -92,6 +96,40 @@ fn probability_chosen_card(
     println!("{:.2}", remaining_bust_nums/total_remaining_deck as f64);
 
 }
+}
+
+fn probability_dealer_win(
+    curr_hand: i32,
+    card_vals: &Vec<i32>,
+    card_counts: &mut Vec<i32>, curr_dealer_hand: i32
+) -> f64{
+    if curr_dealer_hand > 21{
+         println!("{:?}",curr_dealer_hand);
+        return 0.0;
+    }
+    if curr_dealer_hand >= 17{
+        if curr_dealer_hand > curr_hand{
+            return 1.0;
+        }
+        else{
+            return 0.0;
+        }
+    }
+    let total_remaining_deck: i32 = card_counts.iter().sum(); 
+    let mut win_prob: f64 = 0.0;
+    for (i, &val) in card_counts.iter().enumerate(){
+        if card_counts[i] == 0{
+            continue;
+        }
+         let mut next_card_count: Vec<i32> = card_counts.clone();
+         next_card_count[i] -= 1;
+          println!("Current state of card count vector for that branch{:?}", next_card_count);
+         let mut curr_prob: f64 = card_counts[i] as f64/total_remaining_deck as f64;
+         let mut next_total_hand: i32 = val + curr_dealer_hand;
+         win_prob += curr_prob * probability_dealer_win(curr_hand,&card_vals,&mut next_card_count, next_total_hand);
+    }
+    return win_prob;
+
 }
 
 
