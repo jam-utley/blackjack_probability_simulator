@@ -1,48 +1,89 @@
 use eframe::egui::{self, ComboBox};
 use eframe::{run_native, App, CreationContext, NativeOptions};
 
-struct MyApp {
-    selected_option: String,
-    options: Vec<String>,
-    non_string: i32,
-    non_string_vec: Vec<String>,
-    selected_non_string: String,
+struct BlackjackAid {
+    player: Vec<String>, //Picks between player and the dealer
+    selected_player: String,
+    selected_suit: String,
+    suit: Vec<String>,
+    card_number: Vec<String>,
+    selected_number: String,
+    recorded_cards: String,
 }
 
-impl Default for MyApp {
+impl Default for BlackjackAid {
     fn default() -> Self {
         Self {
-            selected_option: "Option 1".to_string(),
-            options: vec!["Option 1".into(), "Option 2".into(), "Option 3".into()],
-            non_string: 42,
-            non_string_vec: vec!["one".into(), "two".into(),"three".into()],
-            selected_non_string: "one".to_string(),
+            player: vec!["Dealer".into(), "Player".into()],
+            selected_player: "Please choose a player".to_string(),
+            selected_suit: "Please select a suit".to_string(),
+            suit: vec![
+                "Hearts".into(),
+                "Spades".into(),
+                "Diamonds".into(),
+                "Clubs".into(),
+            ],
+            card_number: vec![
+                "one".into(),
+                "two".into(),
+                "three".into(),
+                "four".into(),
+                "five".into(),
+                "six".into(),
+                "seven".into(),
+                "eight".into(),
+                "nine".into(),
+                "ten".into(),
+                "jack".into(),
+                "queen".into(),
+                "king".into(),
+                "ace".into(),
+            ],
+            selected_number: "Please select a number".to_string(),
+            recorded_cards: String::new(),
         }
     }
 }
 
-impl App for MyApp {
+impl App for BlackjackAid {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
-            ui.label("Choose an option:");
-
-            ComboBox::from_label("Options")
-                .selected_text(&self.selected_option)
+            ui.label("Choose a card:");
+            ComboBox::from_label("Player/Dealer")
+                .selected_text(&self.selected_player)
                 .show_ui(ui, |ui| {
-                    for option in &self.options {
-                        ui.selectable_value(&mut self.selected_option, option.clone(), option);
+                    for player in &self.player {
+                        ui.selectable_value(&mut self.selected_player, player.clone(), player);
                     }
                 });
-            ComboBox::from_label("Numbers")
-                .selected_text(&self.selected_non_string)
+            ComboBox::from_label("Suit")
+                .selected_text(&self.selected_suit)
                 .show_ui(ui, |ui| {
-                    for non_string_vec in &self.non_string_vec {
-                        ui.selectable_value(&mut self.selected_non_string, non_string_vec.clone(), non_string_vec);
+                    for suit in &self.suit {
+                        ui.selectable_value(&mut self.selected_suit, suit.clone(), suit);
                     }
                 });
+            ComboBox::from_label("Number")
+                .selected_text(&self.selected_number)
+                .show_ui(ui, |ui| {
+                    for card_number in &self.card_number {
+                        ui.selectable_value(
+                            &mut self.selected_number,
+                            card_number.clone(),
+                            card_number,
+                        );
+                    }
+                });
+            if ui.button("Add").clicked() {
+                //appends selected number and suit to a rolling string of values
+                self.recorded_cards +=
+                    &format!("the {} of {}\n", self.selected_number, self.selected_suit)
+                        .to_string();
+            }
             ui.separator();
-            ui.label(format!("You selected: {}", self.selected_option));
-            ui.label(format!("Your number is: {}", self.non_string));
+
+            ui.label(format!("You selected:"));
+            ui.label(format!("{}", self.recorded_cards));
         });
     }
 }
@@ -50,8 +91,8 @@ impl App for MyApp {
 fn main() {
     let options = NativeOptions::default();
     run_native(
-        "ComboBox with egui",
+        "Blackjack Assistant",
         options,
-        Box::new(|_cc| Ok(Box::new(MyApp::default()))),
+        Box::new(|_cc| Ok(Box::new(BlackjackAid::default()))),
     );
 }
