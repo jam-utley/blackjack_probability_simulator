@@ -1,80 +1,57 @@
-use std::collections::HashMap; //hashmap used to store images that are from a file 
-use std::path::Path;
+use eframe::egui::{self, ComboBox};
+use eframe::{run_native, App, CreationContext, NativeOptions};
 
-use eframe::egui::{self, ColorImage, TextureHandle, TextureOptions};
-
-fn load_texture(ctx: &egui::Context, path: &str) -> Option<TextureHandle> { //loads png and turns into texture to be read by UI
-    let img = image::open(Path::new(path)).ok()?;
-    let size = [img.width() as usize, img.height() as usize];
-    let rgba = img.to_rgba8().into_raw();
-    let color_img = ColorImage::from_rgba_unmultiplied(size, &rgba);
-    Some(ctx.load_texture(path, color_img, TextureOptions::default()))
+struct MyApp {
+    selected_option: String,
+    options: Vec<String>,
+    non_string: i32,
+    non_string_vec: Vec<String>,
+    selected_non_string: String,
 }
 
-struct CardClickApp {
-    textures: HashMap<String, TextureHandle>, //stores loaded images so they don't reload everytime
-    clicked: Option<String>, //stores which card is clicked
-}
-
-impl Default for CardClickApp { //defining what happens when app is first started 
+impl Default for MyApp {
     fn default() -> Self {
         Self {
-            textures: HashMap::new(), //empty image cache
-            clicked: None, //nothing clicked yet
+            selected_option: "Option 1".to_string(),
+            options: vec!["Option 1".into(), "Option 2".into(), "Option 3".into()],
+            non_string: 42,
+            non_string_vec: vec!["one".into(), "two".into(),"three".into()],
+            selected_non_string: "one".to_string(),
         }
     }
 }
 
-impl eframe::App for CardClickApp {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) { //drawing window frame
-        egui::CentralPanel::default().show(ctx, |ui| { //establishing title
-            ui.heading("Click a card");
+impl App for MyApp {
+    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        egui::CentralPanel::default().show(ctx, |ui| {
+            ui.label("Choose an option:");
 
-            let cards = vec!["10_of_hearts", "ace_of_spades", "2_of_diamonds", "king_of_hearts"]; //choosing which cards to display
-
-            for name in &cards { //looping through card names checking to make sure loaded into cache
-                let path = format!("assets/{}.png", name);
-                if !self.textures.contains_key(&path) {
-                    if let Some(tex) = load_texture(ctx, &path) {
-                        self.textures.insert(path.clone(), tex);
+            ComboBox::from_label("Options")
+                .selected_text(&self.selected_option)
+                .show_ui(ui, |ui| {
+                    for option in &self.options {
+                        ui.selectable_value(&mut self.selected_option, option.clone(), option);
                     }
-                }
-            }
-
-            ui.horizontal(|ui| { //displaying cards
-                for name in &cards {
-                    let path = format!("assets/{}.png", name); //pulling from file of pngs
-                    if let Some(tex) = self.textures.get(&path) {
-                        if ui
-                            .add(egui::ImageButton::new(
-                                egui::Image::new(tex).fit_to_exact_size(egui::vec2(80.0, 120.0)),
-                            ))
-                            .clicked() //letting user click card
-                        {
-                            self.clicked = Some(name.to_string());
-                        }
+                });
+            ComboBox::from_label("Numbers")
+                .selected_text(&self.selected_non_string)
+                .show_ui(ui, |ui| {
+                    for non_string_vec in &self.non_string_vec {
+                        ui.selectable_value(&mut self.selected_non_string, non_string_vec.clone(), non_string_vec);
                     }
-                }
-            });
-
-            if let Some(card) = &self.clicked {
-                ui.label(format!("You clicked: {}", card)); //once clicked displays name 
-            }
+                });
+            ui.separator();
+            ui.label(format!("You selected: {}", self.selected_option));
+            ui.label(format!("Your number is: {}", self.non_string));
         });
     }
 }
 
-fn main() -> Result<(), eframe::Error> {
-    let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default()
-            .with_inner_size([400.0, 300.0])
-            .into(),
-        ..Default::default()
-    };
-
-    eframe::run_native(
-        "Card Clicker",
+fn main() {
+    let options = NativeOptions::default();
+    run_native(
+        "ComboBox with egui",
         options,
-        Box::new(|_cc| Box::<CardClickApp>::default()),
-    )
+        Box::new(|_cc| Ok(Box::new(MyApp::default()))),
+    );
 }
