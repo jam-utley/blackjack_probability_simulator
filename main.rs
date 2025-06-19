@@ -1,5 +1,5 @@
 use eframe::egui::{self, ColorImage, ComboBox, TextureHandle, TextureOptions};
-use eframe::{run_native, App, NativeOptions};
+use eframe::{App, NativeOptions, run_native};
 use std::collections::HashMap;
 use std::path::Path;
 
@@ -60,7 +60,7 @@ impl Default for BlackjackAid {
                 .map(String::from)
                 .collect(),
             card_number: vec![
-                "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "jack", "queen", "king", "ace",
+                "2", "3", "4", "5", "6", "7", "8", "9", "10", "jack", "queen", "king", "ace",
             ]
             .into_iter()
             .map(String::from)
@@ -78,14 +78,14 @@ impl Default for BlackjackAid {
 impl App for BlackjackAid {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         let visuals = egui::Visuals {
-            //sets background ccolor for dropown menus and windows, not the entire page
+            //sets background color for dropown menus and windows, not the entire page
             window_fill: egui::Color32::from_rgb(10, 10, 40),
             ..egui::Visuals::dark()
         };
         ctx.set_visuals(visuals);
 
         //creates floating window. anchored at top right, offset of -5.0,5.0
-        egui::Window::new("Dealer's Hand")
+/*        egui::Window::new("Dealer's Hand")
             .anchor(egui::Align2::RIGHT_TOP, [-5.0, 5.0])
             .show(ctx, |ui| {
                 ui.label(
@@ -100,7 +100,7 @@ impl App for BlackjackAid {
                     egui::RichText::new(&self.recorded_cards_player1).color(egui::Color32::RED),
                 );
             });
-
+*/
         egui::Window::new("Probabilities")
             .anchor(egui::Align2::RIGHT_BOTTOM, [-5.0, 5.0])
             .show(ctx, |ui| {
@@ -115,7 +115,7 @@ impl App for BlackjackAid {
                 ));
             });
 
-        // Central panel
+        //Central panel
         egui::CentralPanel::default()
             .frame(egui::Frame::default().fill(egui::Color32::from_rgb(40, 110, 31))) //sets page background color
             .show(ctx, |ui| {
@@ -197,15 +197,19 @@ impl App for BlackjackAid {
                 // Display selected cards
                 ui.separator();
                 ui.label("Player Cards:");
-                for card_id in &self.player1_card_ids {
-                    display_card(ui, ctx, card_id, &mut self.textures);
-                }
+                ui.horizontal(|ui| {
+                    for card_id in &self.player1_card_ids {
+                        display_card(ui, ctx, card_id, &mut self.textures);
+                    }
+                });
 
                 ui.separator();
                 ui.label("Dealer Cards:");
-                for card_id in &self.dealer_card_ids {
-                    display_card(ui, ctx, card_id, &mut self.textures);
-                }
+                ui.horizontal(|ui| {
+                    for card_id in &self.dealer_card_ids {
+                        display_card(ui, ctx, card_id, &mut self.textures);
+                    }
+                });
             });
     }
 }
@@ -228,7 +232,14 @@ fn display_card(
     }
 
     if let Some(tex) = textures.get(&path) {
-        ui.add(egui::Image::new(tex).fit_to_exact_size(egui::vec2(80.0, 110.0)));
+        let mut frame = egui::Frame::default()
+            .fill(egui::Color32::WHITE)
+            .inner_margin(egui::Margin::same(1))
+            .rounding(egui::Rounding::same(5))
+            .stroke(egui::Stroke::new(1.0, egui::Color32::BLACK));
+        frame.show(ui, |ui| {
+            ui.add(egui::Image::new(tex).fit_to_exact_size(egui::vec2(80.0, 110.0)));
+        });
     }
 }
 
@@ -237,6 +248,6 @@ fn main() {
     run_native(
         "Blackjack Assistant",
         options,
-        Box::new(|_cc| Box::new(BlackjackAid::default())),
+        Box::new(|_cc| Ok(Box::new(BlackjackAid::default()))),
     );
 }
