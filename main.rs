@@ -4,9 +4,9 @@ use std::collections::HashMap;
 use std::path::Path;
 
 //things to do:
-//Add Hit Button to draw a new card ?
-//Add Stand Button ?
-//Add Section for probabilities
+//finish card counting function
+//add New Round button
+//incorporate probability functions
 
 fn load_texture(ctx: &egui::Context, path: &str) -> Option<TextureHandle> {
     println!("Loading image: {}", path);
@@ -17,10 +17,152 @@ fn load_texture(ctx: &egui::Context, path: &str) -> Option<TextureHandle> {
     Some(ctx.load_texture(path, color_img, TextureOptions::default()))
 }
 
+fn hand_total(input: Vec<String>) -> i32 {
+    let mut output = Vec::new();
+    let mut hand_value: i32 = 0;
+    let mut ace_in_hand: bool = false;
+    let mut number_of_aces: i8 = 0;
+    let converter = StringToInt::new();
+    for mut i in input {
+        if i == "ace".to_string() {
+            i = "ace_high".to_string();
+            number_of_aces += 1;
+            ace_in_hand = true;
+        }
+        match converter.get_value(i.as_str()) {
+            Some(value) => output.push(value),
+            None => println!("Failed to convert: invalid input"),
+        }
+    }
+
+    for j in output {
+        hand_value += j;
+    }
+    if ace_in_hand {
+        'ace_conversion: for _k in 1..=number_of_aces {
+            if hand_value > 21 {
+                hand_value -= 10; //converts high ace to a low ace
+            } else {
+                break 'ace_conversion;
+            }
+        }
+    }
+    return hand_value;
+}
+
+fn generate_all_cards(suits: &Vec<String>, numbers: &Vec<String>) {
+    //THIS MUST BE FINISHED
+    for i in suits{
+        for j in numbers{
+            BlackjackAid::default().cards_remaining.push((i,j));//.push([i as usize][j as usize]);
+        }
+    }
+}
+
+fn probability_dealer_win(
+    curr_player1_hand: i32,
+    card_vals: &Vec<i32>,
+    card_counts: &Vec<i32>,
+    curr_dealer_hand: i32,
+) -> f64 {
+    //Args
+    //'curr_player1_hand' - total current player1 hand
+    //'card_Vals' - vector of card values with faces and numbers
+    //'card_counts' - 'card counts which holds how many total cards in the vector remaining
+    //'curr_dealer_hand` - total amount of current dealer
+
+    //check if dealer busts if current dealer hand
+    if curr_dealer_hand > 21 {
+        //println!("{:?}",curr_dealer_hand);
+        return 0.0;
+    }
+    //check if dealer stand if current dealer <=17 and less than or equal to 21
+    if curr_dealer_hand >= 17 && curr_dealer_hand <= 21 {
+        if curr_dealer_hand > curr_player1_hand {
+            //check if current dealer hand is greater than players hand then return 1.0 for the weight probability
+            //println!("Dealer wins with {} vs {}", curr_dealer_hand, curr_hand);
+            return 1.0;
+        } else {
+            //            println!("Dealer stands with {} — not enough to beat {}", curr_dealer_hand, curr_hand);
+            return 0.0; //else return 0.0
+        }
+    }
+    let total_remaining_deck: i32 = card_counts.iter().sum(); //sum all remaining decks
+    let mut win_prob: f64 = 0.0;
+    for (i, &val) in card_counts.iter().enumerate() {
+        //loop through each remaining card if exists in card_count vector deck
+        if card_counts[i] == 0 {
+            continue;
+        }
+        let mut next_card_count: Vec<i32> = card_counts.clone(); //create clone to prevent mutate globally
+        next_card_count[i] -= 1;
+        let mut curr_prob: f64 = card_counts[i] as f64 / total_remaining_deck as f64; //calculate current probability
+        let mut next_total_hand: i32 = card_vals[i] + curr_dealer_hand; //sum the total value of the next dealer hand
+        win_prob += curr_prob
+            * probability_dealer_win(curr_player1_hand, &card_vals, &next_card_count, next_total_hand);
+    }
+    return win_prob;
+}
+
+struct StringToInt {
+    ace_low: i32,
+    two: i32,
+    three: i32,
+    four: i32,
+    five: i32,
+    six: i32,
+    seven: i32,
+    eight: i32,
+    nine: i32,
+    jack: i32,
+    queen: i32,
+    king: i32,
+    ace_high: i32,
+}
+
+impl StringToInt {
+    fn new() -> Self {
+        Self {
+            ace_low: 1,
+            two: 2,
+            three: 3,
+            four: 4,
+            five: 5,
+            six: 6,
+            seven: 7,
+            eight: 8,
+            nine: 9,
+            jack: 10,
+            queen: 10,
+            king: 10,
+            ace_high: 11,
+        }
+    }
+    fn get_value(&self, name: &str) -> Option<i32> {
+        match name {
+            "ace_low" => Some(self.ace_low),
+            "2" => Some(self.two),
+            "3" => Some(self.three),
+            "4" => Some(self.four),
+            "5" => Some(self.five),
+            "6" => Some(self.six),
+            "7" => Some(self.seven),
+            "8" => Some(self.eight),
+            "9" => Some(self.nine),
+            "jack" => Some(self.jack),
+            "queen" => Some(self.queen),
+            "king" => Some(self.king),
+            "ace_high" => Some(self.ace_high),
+            _ => None,
+        }
+    }
+}
+
 struct BlackjackProbabilities {
     prob_bust: f64,
     prob_next_blackjack: f64,
     prob_win_by_stand: f64,
+    prob_dealer_wins: f64,
 }
 
 impl Default for BlackjackProbabilities {
@@ -29,6 +171,7 @@ impl Default for BlackjackProbabilities {
             prob_bust: 0.0,
             prob_next_blackjack: 0.0,
             prob_win_by_stand: 0.0,
+            prob_dealer_wins: 0.0,
         }
     }
 }
@@ -40,10 +183,13 @@ struct BlackjackAid {
     selected_number: String,
     suit: Vec<String>,
     card_number: Vec<String>,
-    recorded_cards_dealer: String,
-    recorded_cards_player1: String,
+    recorded_cards_dealer: Vec<String>,
+    recorded_cards_player1: Vec<String>,
     dealer_card_ids: Vec<String>,
     player1_card_ids: Vec<String>,
+    player1_hand_total: i32,
+    dealer_hand_total: i32,
+    cards_remaining: Vec<i32>,
     bjp: BlackjackProbabilities,
     textures: HashMap<String, TextureHandle>,
 }
@@ -65,10 +211,13 @@ impl Default for BlackjackAid {
             .into_iter()
             .map(String::from)
             .collect(),
-            recorded_cards_dealer: String::new(),
-            recorded_cards_player1: String::new(),
+            recorded_cards_dealer: Vec::new(),
+            recorded_cards_player1: Vec::new(),
             dealer_card_ids: vec![],
             player1_card_ids: vec![],
+            player1_hand_total: 0,
+            dealer_hand_total: 0,
+            cards_remaining: Vec::new(),
             bjp: BlackjackProbabilities::default(),
             textures: HashMap::new(),
         }
@@ -84,25 +233,8 @@ impl App for BlackjackAid {
         };
         ctx.set_visuals(visuals);
 
-        //creates floating window. anchored at top right, offset of -5.0,5.0
-/*        egui::Window::new("Dealer's Hand")
-            .anchor(egui::Align2::RIGHT_TOP, [-5.0, 5.0])
-            .show(ctx, |ui| {
-                ui.label(
-                    egui::RichText::new(&self.recorded_cards_dealer).color(egui::Color32::BLUE),
-                );
-            });
-
-        egui::Window::new("Player's Hand")
-            .anchor(egui::Align2::RIGHT_TOP, [-5.0, 100.0])
-            .show(ctx, |ui| {
-                ui.label(
-                    egui::RichText::new(&self.recorded_cards_player1).color(egui::Color32::RED),
-                );
-            });
-*/
         egui::Window::new("Probabilities")
-            .anchor(egui::Align2::RIGHT_BOTTOM, [-5.0, 5.0])
+            .anchor(egui::Align2::RIGHT_TOP, [-5.0, 5.0])
             .show(ctx, |ui| {
                 ui.label(format!("Probability of Bust: {:.1}%", self.bjp.prob_bust));
                 ui.label(format!(
@@ -163,15 +295,16 @@ impl App for BlackjackAid {
 
                         match self.selected_player.as_str() {
                             "Dealer" => {
-                                self.recorded_cards_dealer += &label;
+                                self.recorded_cards_dealer.push(self.selected_number.clone());//saves the number of the card
                                 self.dealer_card_ids.push(card_id);
                             }
                             "Player 1" => {
-                                self.recorded_cards_player1 += &label;
+                                self.recorded_cards_player1.push(self.selected_number.clone());
                                 self.player1_card_ids.push(card_id);
                             }
                             _ => {}
                         }
+                        //self.bjp.prob_dealer_wins = probability_dealer_win(self.player1_hand_total.clone(),self.record)//add rest of stuff
                     }
                 }
 
@@ -202,6 +335,9 @@ impl App for BlackjackAid {
                         display_card(ui, ctx, card_id, &mut self.textures);
                     }
                 });
+                //calculates hand total
+                self.player1_hand_total = hand_total(self.recorded_cards_player1.clone());
+                ui.label(format!("Hand Total = {}", self.player1_hand_total));
 
                 ui.separator();
                 ui.label("Dealer Cards:");
@@ -210,6 +346,8 @@ impl App for BlackjackAid {
                         display_card(ui, ctx, card_id, &mut self.textures);
                     }
                 });
+                self.dealer_hand_total = hand_total(self.recorded_cards_dealer.clone());
+                ui.label(format!("Hand Total = {}", self.dealer_hand_total));
             });
     }
 }
