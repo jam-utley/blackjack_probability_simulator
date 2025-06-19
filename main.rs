@@ -10,7 +10,7 @@ fn main() {
 
     
     // hands--eventually will be selected from display
-    let hand = ["five".to_string(), "seven".into()];
+    let hand = ["five".to_string(), "queen".into()];
     let dealer_hand = ["king".to_string()];
 
 
@@ -39,9 +39,10 @@ fn main() {
     println!("{:?}", card_counts);
     println!("Current player hand: {}\nDealer hand: {}", curr_hand, curr_dealer_hand);
      probability_busting(4,curr_hand,&card_vals,&mut card_counts);
+     let probability_dealer_win =  probability_dealer_win(curr_hand, &card_vals, &card_counts, curr_dealer_hand);
+     println!("{:?}", probability_dealer_win)
+
 }
-
-
 
 // function matching the names of the cards to the value vector and counts-tracking vector
 fn card_index(card: &str) -> usize {
@@ -101,32 +102,35 @@ fn probability_busting(
 fn probability_dealer_win(
     curr_hand: i32,
     card_vals: &Vec<i32>,
-    card_counts: &mut Vec<i32>, curr_dealer_hand: i32
+    card_counts: &Vec<i32>, curr_dealer_hand: i32
 ) -> f64{
+    //check if dealer busts if current dealer hand 
     if curr_dealer_hand > 21{
          println!("{:?}",curr_dealer_hand);
         return 0.0;
     }
-    if curr_dealer_hand >= 17{
-        if curr_dealer_hand > curr_hand{
+    //check if dealer stand if current dealer <=17 and less than or equal to 21  
+    if curr_dealer_hand >= 17 && curr_dealer_hand <=21{
+        if curr_dealer_hand > curr_hand{       //check if current dealer hand is greater than players hand then return 1.0 for the weight probability 
+             println!("Dealer wins with {} vs {}", curr_dealer_hand, curr_hand);
             return 1.0;
         }
         else{
-            return 0.0;
+            println!("Dealer stands with {} — not enough to beat {}", curr_dealer_hand, curr_hand);
+            return 0.0;          //else return 0.0 
         }
     }
-    let total_remaining_deck: i32 = card_counts.iter().sum(); 
-    let mut win_prob: f64 = 0.0;
-    for (i, &val) in card_counts.iter().enumerate(){
+    let total_remaining_deck: i32 = card_counts.iter().sum();  //sum all remaining decks 
+    let mut win_prob: f64 = 0.0; 
+    for (i, &val) in card_counts.iter().enumerate(){        //loop through each remaining card if exists in card_count vector deck 
         if card_counts[i] == 0{
             continue;
         }
-         let mut next_card_count: Vec<i32> = card_counts.clone();
+         let mut next_card_count: Vec<i32> = card_counts.clone();    //create clone to prevent mutate globally 
          next_card_count[i] -= 1;
-          println!("Current state of card count vector for that branch{:?}", next_card_count);
-         let mut curr_prob: f64 = card_counts[i] as f64/total_remaining_deck as f64;
-         let mut next_total_hand: i32 = val + curr_dealer_hand;
-         win_prob += curr_prob * probability_dealer_win(curr_hand,&card_vals,&mut next_card_count, next_total_hand);
+         let mut curr_prob: f64 = card_counts[i] as f64/total_remaining_deck as f64;  //calculate current probability 
+         let mut next_total_hand: i32 = card_vals[i] + curr_dealer_hand; //sum the total value of the next dealer hand 
+         win_prob += curr_prob * probability_dealer_win(curr_hand,&card_vals,&next_card_count, next_total_hand);
     }
     return win_prob;
 
