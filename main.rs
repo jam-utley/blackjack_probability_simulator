@@ -10,12 +10,9 @@ fn main() {
 
     
     // hands--eventually will be selected from display
-    let hand = ["five".to_string(), "queen".into()];
-    let dealer_hand = ["king".to_string()];
+    let hand = ["five".to_string(), "nine".into()];
+    let dealer_hand = ["nine".to_string()];
 
-
-
-    
     let mut card_counts = vec![4*num_decks; 13]; // number of cards remaining in order
 
     // calculate player hand value and change card counts
@@ -38,7 +35,7 @@ fn main() {
     // temporary prints to track
     println!("{:?}", card_counts);
     println!("Current player hand: {}\nDealer hand: {}", curr_hand, curr_dealer_hand);
-     probability_busting(4,curr_hand,&card_vals,&mut card_counts);
+     probability_busting(4,curr_hand,&card_vals,&card_counts);
      let probability_dealer_win =  probability_dealer_win(curr_hand, &card_vals, &card_counts, curr_dealer_hand);
      println!("{:?}", probability_dealer_win)
 
@@ -64,9 +61,6 @@ fn card_index(card: &str) -> usize {
     }
 }
 
-
-
-
 //if you chose this num, fn to provide the probability of busting 
 //Args
 // `val`: value of the card 
@@ -77,21 +71,21 @@ fn probability_busting(
     val: i32,
     curr_hand: i32,
     card_vals: &Vec<i32>,
-    card_counts: &mut Vec<i32>,
+    card_counts: &Vec<i32>,
 ){
+       let mut temp_card_counts: Vec<i32> = card_counts.clone();
       //calculate of a player getting a bust 
     if let Some(index) = card_vals.iter().position(|&x| x == val) {
         let mut temp_hand = curr_hand + card_vals[index];
-        if card_counts[index] > 0 {
-            card_counts[index] -= 1;
+        if temp_card_counts[index] > 0 {
+            temp_card_counts[index] -= 1;
         }
-    println!("{:?}", card_counts);
     let mut remaining_bust_nums: f64 = 0.0;
-    let total_remaining_deck: i32 = card_counts.iter().sum();  //total remaining cards 
+    let total_remaining_deck: i32 = temp_card_counts.iter().sum();  //total remaining cards 
      for (i, &val) in card_vals.iter().enumerate(){ //loop to get val and its current index 
-        if val > 21 - temp_hand && card_counts[i] > 0{ //check if val greater than 
+        if val > 21 - temp_hand && temp_card_counts[i] > 0{ //check if val greater than 
           //  println!("Probability of drawing that a {}: {:.2}", card_names[i], card_counts[i] as f64/total_remaining_deck as f64);
-            remaining_bust_nums  +=  card_counts[i] as f64
+            remaining_bust_nums  +=  temp_card_counts[i] as f64
     }
 }
     println!("{:.2}", remaining_bust_nums/total_remaining_deck as f64);
@@ -99,6 +93,11 @@ fn probability_busting(
 }
 }
 
+//Args
+//'curr_hand' - total current hand
+//'card_Vals' - vector of card values with faces and numbers
+//'card_counts' - 'card counts which holds how many total cards in the vector remaining
+//'curr_dealer_hand` - total amount of current dealer
 fn probability_dealer_win(
     curr_hand: i32,
     card_vals: &Vec<i32>,
@@ -135,6 +134,5 @@ fn probability_dealer_win(
     return win_prob;
 
 }
-
 
 
