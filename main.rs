@@ -11,7 +11,7 @@ fn main() {
     
     // hands--eventually will be selected from display
     let hand = ["five".to_string(), "nine".into()];
-    let dealer_hand = ["nine".to_string()];
+    let dealer_hand = ["four".to_string()];
 
     let mut card_counts = vec![4*num_decks; 13]; // number of cards remaining in order
 
@@ -37,7 +37,9 @@ fn main() {
     println!("Current player hand: {}\nDealer hand: {}", curr_hand, curr_dealer_hand);
      probability_busting(4,curr_hand,&card_vals,&card_counts);
      let probability_dealer_win =  probability_dealer_win(curr_hand, &card_vals, &card_counts, curr_dealer_hand);
-     println!("{:?}", probability_dealer_win)
+     println!("{:?}", probability_dealer_win);
+     println!("Probability you win if you stay {:?}", 1.0 - probability_dealer_win);
+
 
 }
 
