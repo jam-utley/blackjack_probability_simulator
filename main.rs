@@ -151,7 +151,7 @@ fn probability_blackjack(num_decks: i32, card_counts: &Vec<i32>) -> f64{
             if i == 0{
                 total_aces = card_counts[i];
             }
-            else if i >= 10{
+            else if i >= 9{
                 total_tens += card_counts[i]
             }
         }
