@@ -50,26 +50,15 @@ fn hand_total(input: Vec<String>) -> i32 {
     return hand_value;
 }
 
-fn generate_all_cards(suits: &Vec<String>, numbers: &Vec<String>) {
-    //THIS MUST BE FINISHED
-    for i in suits{
-        for j in numbers{
-            BlackjackAid::default().cards_remaining.push((i,j));//.push([i as usize][j as usize]);
-        }
-    }
-}
-
 fn probability_dealer_win(
-    curr_player1_hand: i32,
-    card_vals: &Vec<i32>,
+    curr_hand: i32,
     card_counts: &Vec<i32>,
     curr_dealer_hand: i32,
 ) -> f64 {
-    //Args
-    //'curr_player1_hand' - total current player1 hand
-    //'card_Vals' - vector of card values with faces and numbers
-    //'card_counts' - 'card counts which holds how many total cards in the vector remaining
-    //'curr_dealer_hand` - total amount of current dealer
+
+    //replace card_vals with calls to the struct
+
+    let card_vals = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 10, 10, 10, 11]; //values of the cards
 
     //check if dealer busts if current dealer hand
     if curr_dealer_hand > 21 {
@@ -78,29 +67,34 @@ fn probability_dealer_win(
     }
     //check if dealer stand if current dealer <=17 and less than or equal to 21
     if curr_dealer_hand >= 17 && curr_dealer_hand <= 21 {
-        if curr_dealer_hand > curr_player1_hand {
+        if curr_dealer_hand > curr_hand {
             //check if current dealer hand is greater than players hand then return 1.0 for the weight probability
             //println!("Dealer wins with {} vs {}", curr_dealer_hand, curr_hand);
             return 1.0;
         } else {
-            //            println!("Dealer stands with {} — not enough to beat {}", curr_dealer_hand, curr_hand);
+            //println!("Dealer stands with {} — not enough to beat {}", curr_dealer_hand, curr_hand);
             return 0.0; //else return 0.0
         }
     }
+
+    //This variable tracks the sum total of all of the remaining cards?
     let total_remaining_deck: i32 = card_counts.iter().sum(); //sum all remaining decks
+                                                              //println!("{total_remaining_deck}");
+    let cards_remaining = BlackjackAid::default().cards_remaining.clone();
     let mut win_prob: f64 = 0.0;
-    for (i, &val) in card_counts.iter().enumerate() {
+    for (i, &val) in cards_remaining.iter().enumerate() {
         //loop through each remaining card if exists in card_count vector deck
-        if card_counts[i] == 0 {
+        if cards_remaining[i] == 0 {
             continue;
         }
-        let mut next_card_count: Vec<i32> = card_counts.clone(); //create clone to prevent mutate globally
+        let mut next_card_count: Vec<i32> = cards_remaining.clone(); //create clone to prevent mutate globally
         next_card_count[i] -= 1;
-        let mut curr_prob: f64 = card_counts[i] as f64 / total_remaining_deck as f64; //calculate current probability
+        let mut curr_prob: f64 = cards_remaining[i] as f64 / total_remaining_deck as f64; //calculate current probability
         let mut next_total_hand: i32 = card_vals[i] + curr_dealer_hand; //sum the total value of the next dealer hand
         win_prob += curr_prob
-            * probability_dealer_win(curr_player1_hand, &card_vals, &next_card_count, next_total_hand);
+            * probability_dealer_win(curr_hand, &next_card_count, next_total_hand);
     }
+    //win_prob *= 100.0;
     return win_prob;
 }
 
@@ -114,6 +108,7 @@ struct StringToInt {
     seven: i32,
     eight: i32,
     nine: i32,
+    ten: i32,
     jack: i32,
     queen: i32,
     king: i32,
@@ -132,6 +127,7 @@ impl StringToInt {
             seven: 7,
             eight: 8,
             nine: 9,
+            ten: 10,
             jack: 10,
             queen: 10,
             king: 10,
@@ -149,6 +145,7 @@ impl StringToInt {
             "7" => Some(self.seven),
             "8" => Some(self.eight),
             "9" => Some(self.nine),
+            "10" => Some(self.ten),
             "jack" => Some(self.jack),
             "queen" => Some(self.queen),
             "king" => Some(self.king),
@@ -189,6 +186,7 @@ struct BlackjackAid {
     player1_card_ids: Vec<String>,
     player1_hand_total: i32,
     dealer_hand_total: i32,
+    number_of_decks: i32,
     cards_remaining: Vec<i32>,
     bjp: BlackjackProbabilities,
     textures: HashMap<String, TextureHandle>,
@@ -196,6 +194,7 @@ struct BlackjackAid {
 
 impl Default for BlackjackAid {
     fn default() -> Self {
+        let number_of_decks = 1;
         Self {
             player: vec!["Dealer".into(), "Player 1".into()],
             selected_player: "Please choose a player".into(),
@@ -217,7 +216,8 @@ impl Default for BlackjackAid {
             player1_card_ids: vec![],
             player1_hand_total: 0,
             dealer_hand_total: 0,
-            cards_remaining: Vec::new(),
+            number_of_decks,
+            cards_remaining: vec![4 * number_of_decks; 13],
             bjp: BlackjackProbabilities::default(),
             textures: HashMap::new(),
         }
@@ -244,6 +244,10 @@ impl App for BlackjackAid {
                 ui.label(format!(
                     "Probability of Winning by Standing: {:.1}%",
                     self.bjp.prob_win_by_stand
+                ));
+                ui.label(format!(
+                    "Probability of Winning by Standing: {:.1}%",
+                    self.bjp.prob_dealer_wins
                 ));
             });
 
@@ -304,10 +308,15 @@ impl App for BlackjackAid {
                             }
                             _ => {}
                         }
-                        //self.bjp.prob_dealer_wins = probability_dealer_win(self.player1_hand_total.clone(),self.record)//add rest of stuff
                     }
+                if self.recorded_cards_dealer.len() >= 1 && self.recorded_cards_player1.len() >= 2{
+                    println!("Computing probabilities!");
+                    self.bjp.prob_dealer_wins = (probability_dealer_win(self.player1_hand_total.clone(),&self.cards_remaining.clone(), self.dealer_hand_total))*100.0;
                 }
-
+                }
+                
+                
+                
                 // Reset buttons
                 ui.separator();
                 ui.horizontal(|ui| {
