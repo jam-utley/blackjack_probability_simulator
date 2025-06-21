@@ -1,9 +1,10 @@
 [package]
-name = "blackjack_equi_helper"
+name = "jacktest"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
 eframe = "0.27"
 egui = "0.27"
+egui-dropdown = "0.13.0"
 image = "0.25"

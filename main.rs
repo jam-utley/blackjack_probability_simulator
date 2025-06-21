@@ -1,5 +1,5 @@
 use eframe::egui::{self, ColorImage, ComboBox, TextureHandle, TextureOptions};
-use eframe::{App, NativeOptions, run_native};
+use eframe::{App, NativeOptions};
 use std::collections::HashMap;
 use std::path::Path;
 
@@ -50,15 +50,25 @@ fn hand_total(input: Vec<String>) -> i32 {
     return hand_value;
 }
 
+//fn generate_all_cards(suits: &Vec<String>, numbers: &Vec<String>) {
+//THIS MUST BE FINISHED
+// for i in suits{
+// for j in numbers{
+//  BlackjackAid::default().cards_remaining.push([i as usize],[j as usize])};//.push([i as usize][j as usize]);
+// }
+// }
+
 fn probability_dealer_win(
-    curr_hand: i32,
+    curr_player1_hand: i32,
+    card_vals: &Vec<i32>,
     card_counts: &Vec<i32>,
     curr_dealer_hand: i32,
 ) -> f64 {
-
-    //replace card_vals with calls to the struct
-
-    let card_vals = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 10, 10, 10, 11]; //values of the cards
+    //Args
+    //'curr_player1_hand' - total current player1 hand
+    //'card_Vals' - vector of card values with faces and numbers
+    //'card_counts' - 'card counts which holds how many total cards in the vector remaining
+    //'curr_dealer_hand` - total amount of current dealer
 
     //check if dealer busts if current dealer hand
     if curr_dealer_hand > 21 {
@@ -67,34 +77,34 @@ fn probability_dealer_win(
     }
     //check if dealer stand if current dealer <=17 and less than or equal to 21
     if curr_dealer_hand >= 17 && curr_dealer_hand <= 21 {
-        if curr_dealer_hand > curr_hand {
+        if curr_dealer_hand > curr_player1_hand {
             //check if current dealer hand is greater than players hand then return 1.0 for the weight probability
             //println!("Dealer wins with {} vs {}", curr_dealer_hand, curr_hand);
             return 1.0;
         } else {
-            //println!("Dealer stands with {} — not enough to beat {}", curr_dealer_hand, curr_hand);
+            //            println!("Dealer stands with {} — not enough to beat {}", curr_dealer_hand, curr_hand);
             return 0.0; //else return 0.0
         }
     }
-
-    //This variable tracks the sum total of all of the remaining cards?
     let total_remaining_deck: i32 = card_counts.iter().sum(); //sum all remaining decks
-                                                              //println!("{total_remaining_deck}");
-    let cards_remaining = BlackjackAid::default().cards_remaining.clone();
     let mut win_prob: f64 = 0.0;
-    for (i, &val) in cards_remaining.iter().enumerate() {
+    for (i, &_val) in card_counts.iter().enumerate() {
         //loop through each remaining card if exists in card_count vector deck
-        if cards_remaining[i] == 0 {
+        if card_counts[i] == 0 {
             continue;
         }
-        let mut next_card_count: Vec<i32> = cards_remaining.clone(); //create clone to prevent mutate globally
+        let mut next_card_count: Vec<i32> = card_counts.clone(); //create clone to prevent mutate globally
         next_card_count[i] -= 1;
-        let mut curr_prob: f64 = cards_remaining[i] as f64 / total_remaining_deck as f64; //calculate current probability
-        let mut next_total_hand: i32 = card_vals[i] + curr_dealer_hand; //sum the total value of the next dealer hand
+        let curr_prob: f64 = card_counts[i] as f64 / total_remaining_deck as f64; //calculate current probability
+        let next_total_hand: i32 = card_vals[i] + curr_dealer_hand; //sum the total value of the next dealer hand
         win_prob += curr_prob
-            * probability_dealer_win(curr_hand, &next_card_count, next_total_hand);
+            * probability_dealer_win(
+                curr_player1_hand,
+                &card_vals,
+                &next_card_count,
+                next_total_hand,
+            );
     }
-    //win_prob *= 100.0;
     return win_prob;
 }
 
@@ -108,7 +118,6 @@ struct StringToInt {
     seven: i32,
     eight: i32,
     nine: i32,
-    ten: i32,
     jack: i32,
     queen: i32,
     king: i32,
@@ -127,7 +136,6 @@ impl StringToInt {
             seven: 7,
             eight: 8,
             nine: 9,
-            ten: 10,
             jack: 10,
             queen: 10,
             king: 10,
@@ -145,7 +153,6 @@ impl StringToInt {
             "7" => Some(self.seven),
             "8" => Some(self.eight),
             "9" => Some(self.nine),
-            "10" => Some(self.ten),
             "jack" => Some(self.jack),
             "queen" => Some(self.queen),
             "king" => Some(self.king),
@@ -186,15 +193,30 @@ struct BlackjackAid {
     player1_card_ids: Vec<String>,
     player1_hand_total: i32,
     dealer_hand_total: i32,
-    number_of_decks: i32,
     cards_remaining: Vec<i32>,
     bjp: BlackjackProbabilities,
     textures: HashMap<String, TextureHandle>,
+
+    dogs: Vec<Puppies>,
+    dog_texture: Option<TextureHandle>,
+    visuals_dogs: bool,
+    selected_dog: usize,
+    visuals_set: bool,
+}
+
+struct Puppies {
+    x: f32,
+    y: f32,
+    frame_width: usize,
+    frame_height: usize,
+    total_frames: usize,
+    current_frame: usize,
+    frame_timer: f32,
+    sprite_sheet: TextureHandle,
 }
 
 impl Default for BlackjackAid {
     fn default() -> Self {
-        let number_of_decks = 1;
         Self {
             player: vec!["Dealer".into(), "Player 1".into()],
             selected_player: "Please choose a player".into(),
@@ -216,10 +238,14 @@ impl Default for BlackjackAid {
             player1_card_ids: vec![],
             player1_hand_total: 0,
             dealer_hand_total: 0,
-            number_of_decks,
-            cards_remaining: vec![4 * number_of_decks; 13],
+            cards_remaining: Vec::new(),
             bjp: BlackjackProbabilities::default(),
             textures: HashMap::new(),
+            dog_texture: None,
+            visuals_dogs: false,
+            selected_dog: 0,
+            visuals_set: false,
+            dogs: Vec::new(),
         }
     }
 }
@@ -231,7 +257,75 @@ impl App for BlackjackAid {
             window_fill: egui::Color32::from_rgb(10, 10, 40),
             ..egui::Visuals::dark()
         };
-        ctx.set_visuals(visuals);
+
+        if self.dog_texture.is_none() {
+            let image = image::open("assets/spritesheet_white.png")
+                .unwrap()
+                .to_rgba8();
+            let size = [image.width() as usize, image.height() as usize];
+            let pixels = image.into_raw();
+
+            let texture = ctx.load_texture(
+                "white_dog",
+                egui::ColorImage::from_rgba_unmultiplied(size, &pixels),
+                egui::TextureOptions::NEAREST,
+            );
+
+            self.dog_texture = Some(texture.clone());
+
+            self.dogs.push(Puppies {
+                x: 100.0,
+                y: 100.0,
+                sprite_sheet: texture,
+                frame_width: 74, // CHANGE if your frame size is different
+                frame_height: 128,
+                total_frames: 28, // CHANGE based on how many frames in your sprite sheet
+                current_frame: 0,
+                frame_timer: 0.0,
+            });
+        }
+
+        let visuals = egui::Visuals {
+            window_fill: egui::Color32::from_rgb(10, 10, 40),
+            ..egui::Visuals::dark()
+        };
+
+        let mut delta_x = 0.0;
+        let mut delta_y = 0.0;
+
+        if self.visuals_dogs {
+            for dog in &self.dogs {
+                // draw dog sprite
+            }
+        }
+
+        if ctx.input(|i| i.key_down(egui::Key::ArrowRight)) {
+            delta_x += 5.0;
+        }
+        if ctx.input(|i| i.key_down(egui::Key::ArrowLeft)) {
+            delta_x -= 5.0;
+        }
+        if ctx.input(|i| i.key_down(egui::Key::ArrowDown)) {
+            delta_y += 5.0;
+        }
+        if ctx.input(|i| i.key_down(egui::Key::ArrowUp)) {
+            delta_y -= 5.0;
+        }
+
+        if let Some(puppy) = self.dogs.get_mut(self.selected_dog) {
+            puppy.x += delta_x;
+            puppy.y += delta_y;
+        }
+
+        if let Some(dog) = self.dogs.get_mut(self.selected_dog) {
+            dog.x = (dog.x + delta_x).clamp(0.0, ctx.screen_rect().max.x - 32.0);
+            dog.y = (dog.y + delta_y).clamp(0.0, ctx.screen_rect().max.y - 32.0);
+        }
+
+        if !self.visuals_set {
+            ctx.set_visuals(visuals);
+            self.visuals_set = true;
+        }
 
         egui::Window::new("Probabilities")
             .anchor(egui::Align2::RIGHT_TOP, [-5.0, 5.0])
@@ -245,16 +339,55 @@ impl App for BlackjackAid {
                     "Probability of Winning by Standing: {:.1}%",
                     self.bjp.prob_win_by_stand
                 ));
-                ui.label(format!(
-                    "Probability of Winning by Standing: {:.1}%",
-                    self.bjp.prob_dealer_wins
-                ));
             });
 
         //Central panel
         egui::CentralPanel::default()
             .frame(egui::Frame::default().fill(egui::Color32::from_rgb(40, 110, 31))) //sets page background color
             .show(ctx, |ui| {
+                ui.checkbox(&mut self.visuals_dogs, "Show Dogs");
+
+                let painter = ui.painter_at(ui.available_rect_before_wrap());
+
+                let delta_time = ctx.input(|i| i.stable_dt);
+
+                for (i, dog) in self.dogs.iter_mut().enumerate() {
+                    // Step animation frame every 0.1s
+                    dog.frame_timer += delta_time;
+                    if dog.frame_timer > 0.3 {
+                        dog.current_frame = (dog.current_frame + 1) % dog.total_frames;
+                        dog.frame_timer = 0.0;
+                    }
+
+                    let rect = egui::Rect::from_min_size(
+                        egui::pos2(dog.x, dog.y),
+                        egui::vec2(dog.frame_width as f32, dog.frame_height as f32),
+                    );
+
+                    // UV coords to crop the frame from the sprite sheet
+                    let columns = 7;
+                    let rows = 4;
+                    let sheet_width = 518.0;
+                    let sheet_height = 512.0;
+
+                    let col = (dog.current_frame % columns) as f32;
+                    let row = (dog.current_frame / columns) as f32;
+
+                    let uv_width = dog.frame_width as f32 / sheet_width;
+                    let uv_height = dog.frame_height as f32 / sheet_height;
+
+                    let u0 = col * uv_width;
+                    let v0 = row * uv_height;
+                    let u1 = u0 + uv_width;
+                    let v1 = v0 + uv_height;
+
+                    let uv_rect = egui::Rect::from_min_max(egui::pos2(u0, v0), egui::pos2(u1, v1));
+
+                    // Draw dog sprite frame
+                    painter.image(dog.sprite_sheet.id(), rect, uv_rect, egui::Color32::WHITE);
+
+                }
+
                 ui.label("Choose a card:");
 
                 ComboBox::from_label("Player/Dealer")
@@ -299,24 +432,21 @@ impl App for BlackjackAid {
 
                         match self.selected_player.as_str() {
                             "Dealer" => {
-                                self.recorded_cards_dealer.push(self.selected_number.clone());//saves the number of the card
+                                self.recorded_cards_dealer
+                                    .push(self.selected_number.clone()); //saves the number of the card
                                 self.dealer_card_ids.push(card_id);
                             }
                             "Player 1" => {
-                                self.recorded_cards_player1.push(self.selected_number.clone());
+                                self.recorded_cards_player1
+                                    .push(self.selected_number.clone());
                                 self.player1_card_ids.push(card_id);
                             }
                             _ => {}
                         }
+                        //self.bjp.prob_dealer_wins = probability_dealer_win(self.player1_hand_total.clone(),self.record)//add rest of stuff
                     }
-                if self.recorded_cards_dealer.len() >= 1 && self.recorded_cards_player1.len() >= 2{
-                    println!("Computing probabilities!");
-                    self.bjp.prob_dealer_wins = (probability_dealer_win(self.player1_hand_total.clone(),&self.cards_remaining.clone(), self.dealer_hand_total))*100.0;
                 }
-                }
-                
-                
-                
+
                 // Reset buttons
                 ui.separator();
                 ui.horizontal(|ui| {
@@ -371,6 +501,7 @@ fn display_card(
 
     if !textures.contains_key(&path) {
         if let Some(tex) = load_texture(ctx, &path) {
+
             textures.insert(path.clone(), tex);
         } else {
             ui.label(format!("PNG not found: {}", card));
@@ -379,10 +510,10 @@ fn display_card(
     }
 
     if let Some(tex) = textures.get(&path) {
-        let mut frame = egui::Frame::default()
+        let frame = egui::Frame::default()
             .fill(egui::Color32::WHITE)
-            .inner_margin(egui::Margin::same(1))
-            .rounding(egui::Rounding::same(5))
+            .inner_margin(egui::Margin::same(1.0))
+            .rounding(egui::Rounding::same(5.0))
             .stroke(egui::Stroke::new(1.0, egui::Color32::BLACK));
         frame.show(ui, |ui| {
             ui.add(egui::Image::new(tex).fit_to_exact_size(egui::vec2(80.0, 110.0)));
@@ -391,10 +522,17 @@ fn display_card(
 }
 
 fn main() {
-    let options = NativeOptions::default();
-    run_native(
+    let options = NativeOptions {
+        viewport: egui::ViewportBuilder::default()
+            .with_inner_size([900.0, 720.0])
+            //.with_resizable(true) // 🔥 enable fullscreen here
+            .with_fullscreen(true),
+        ..Default::default()
+    };
+
+    eframe::run_native(
         "Blackjack Assistant",
         options,
-        Box::new(|_cc| Ok(Box::new(BlackjackAid::default()))),
+        Box::new(|_cc| Box::new(BlackjackAid::default())),
     );
 }
