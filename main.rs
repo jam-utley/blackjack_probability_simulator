@@ -50,12 +50,29 @@ fn hand_total(input: Vec<String>) -> i32 {
     return hand_value;
 }
 
-fn probability_dealer_win(
-    curr_hand: i32,
-    card_counts: &Vec<i32>,
-    curr_dealer_hand: i32,
-) -> f64 {
+//Args
+// `val`: value of the card
+//'curr_hand' - total current hand
+//'card_Val' - vector of card values with faces and numbers
+//'card_counts' - 'card counts which holds how many total cards in the vector remaining
 
+fn probability_busting(curr_hand: i32) -> f64 {
+    let bust_number = 21 - curr_hand;
+    let mut bust_cards_sum = 0; //sums the total of the cards remaining that could bust the hand on the next draw
+    for i in (bust_number + 1)..(BlackjackAid::default().cards_remaining.len() as i32) {
+        bust_cards_sum += BlackjackAid::default().cards_remaining[i as usize];
+    }
+    let mut cards_remaining_in_deck = 0;
+    for i in BlackjackAid::default().cards_remaining {
+        cards_remaining_in_deck += i;
+    }
+
+    let prob_bust: f64 = bust_cards_sum as f64 / cards_remaining_in_deck as f64;
+    println!("{prob_bust}");
+    return prob_bust;
+}
+
+fn probability_dealer_win(curr_hand: i32, card_counts: &Vec<i32>, curr_dealer_hand: i32) -> f64 {
     //replace card_vals with calls to the struct
 
     let card_vals = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 10, 10, 10, 11]; //values of the cards
@@ -79,7 +96,7 @@ fn probability_dealer_win(
 
     //This variable tracks the sum total of all of the remaining cards?
     let total_remaining_deck: i32 = card_counts.iter().sum(); //sum all remaining decks
-                                                              //println!("{total_remaining_deck}");
+    //println!("{total_remaining_deck}");
     let cards_remaining = BlackjackAid::default().cards_remaining.clone();
     let mut win_prob: f64 = 0.0;
     for (i, &val) in cards_remaining.iter().enumerate() {
@@ -91,8 +108,8 @@ fn probability_dealer_win(
         next_card_count[i] -= 1;
         let mut curr_prob: f64 = cards_remaining[i] as f64 / total_remaining_deck as f64; //calculate current probability
         let mut next_total_hand: i32 = card_vals[i] + curr_dealer_hand; //sum the total value of the next dealer hand
-        win_prob += curr_prob
-            * probability_dealer_win(curr_hand, &next_card_count, next_total_hand);
+        win_prob +=
+            curr_prob * probability_dealer_win(curr_hand, &next_card_count, next_total_hand);
     }
     //win_prob *= 100.0;
     return win_prob;
@@ -236,7 +253,7 @@ impl App for BlackjackAid {
         egui::Window::new("Probabilities")
             .anchor(egui::Align2::RIGHT_TOP, [-5.0, 5.0])
             .show(ctx, |ui| {
-                ui.label(format!("Probability of Bust: {:.1}%", self.bjp.prob_bust));
+                ui.label(format!("Probability of Bust: {:.2}%", self.bjp.prob_bust));
                 ui.label(format!(
                     "Probability of Immediate Blackjack: {:.1}%",
                     self.bjp.prob_next_blackjack
@@ -246,7 +263,7 @@ impl App for BlackjackAid {
                     self.bjp.prob_win_by_stand
                 ));
                 ui.label(format!(
-                    "Probability of Winning by Standing: {:.1}%",
+                    "Probability of Dealer Wins if You Stand: {:.1}%",
                     self.bjp.prob_dealer_wins
                 ));
             });
@@ -299,24 +316,34 @@ impl App for BlackjackAid {
 
                         match self.selected_player.as_str() {
                             "Dealer" => {
-                                self.recorded_cards_dealer.push(self.selected_number.clone());//saves the number of the card
+                                self.recorded_cards_dealer
+                                    .push(self.selected_number.clone()); //saves the number of the card
                                 self.dealer_card_ids.push(card_id);
                             }
                             "Player 1" => {
-                                self.recorded_cards_player1.push(self.selected_number.clone());
+                                self.recorded_cards_player1
+                                    .push(self.selected_number.clone());
                                 self.player1_card_ids.push(card_id);
                             }
                             _ => {}
                         }
                     }
-                if self.recorded_cards_dealer.len() >= 1 && self.recorded_cards_player1.len() >= 2{
-                    println!("Computing probabilities!");
-                    self.bjp.prob_dealer_wins = (probability_dealer_win(self.player1_hand_total.clone(),&self.cards_remaining.clone(), self.dealer_hand_total))*100.0;
+                    if self.recorded_cards_dealer.len() >= 1
+                        && self.recorded_cards_player1.len() >= 2
+                    {
+                        println!("Computing probabilities!");
+                        self.bjp.prob_dealer_wins = (probability_dealer_win(
+                            self.player1_hand_total.clone(),
+                            &self.cards_remaining.clone(),
+                            self.dealer_hand_total,
+                        )) * 100.0;
+                        self.bjp.prob_win_by_stand =
+                            (1.0 - ((self.bjp.prob_dealer_wins) / 100.0)) * 100.0;
+                        self.bjp.prob_bust =
+                            (probability_busting(self.player1_hand_total.clone())) * 100.0;
+                    }
                 }
-                }
-                
-                
-                
+
                 // Reset buttons
                 ui.separator();
                 ui.horizontal(|ui| {
@@ -328,11 +355,27 @@ impl App for BlackjackAid {
                         self.recorded_cards_player1.clear();
                         self.player1_card_ids.clear();
                     }
-                    if ui.button("New Game").clicked() {
+                    if ui.button("New Round").clicked() {
                         self.recorded_cards_dealer.clear();
                         self.recorded_cards_player1.clear();
                         self.dealer_card_ids.clear();
                         self.player1_card_ids.clear();
+                        self.bjp.prob_dealer_wins = 0.0;
+                        self.bjp.prob_next_blackjack = 0.0;
+                        self.bjp.prob_win_by_stand = 0.0;
+                        self.bjp.prob_bust = 0.0;
+                    }
+                    if ui.button("New Game").clicked() {
+                        //RESETS CARD COUNTING
+                        self.recorded_cards_dealer.clear();
+                        self.recorded_cards_player1.clear();
+                        self.dealer_card_ids.clear();
+                        self.player1_card_ids.clear();
+                        self.cards_remaining = vec![4 * self.number_of_decks; 13];
+                        self.bjp.prob_dealer_wins = 0.0;
+                        self.bjp.prob_next_blackjack = 0.0;
+                        self.bjp.prob_win_by_stand = 0.0;
+                        self.bjp.prob_bust = 0.0;
                     }
                 });
 
