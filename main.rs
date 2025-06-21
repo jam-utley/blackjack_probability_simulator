@@ -39,6 +39,7 @@ fn main() {
      let probability_dealer_win =  probability_dealer_win(curr_hand, &card_vals, &card_counts, curr_dealer_hand);
      println!("{:?}", probability_dealer_win);
      println!("Probability you win if you stay {:?}", 1.0 - probability_dealer_win);
+     println!("Probability to get a blackjack the first time {:?}", probability_blackjack(num_decks));
 
 
 }
@@ -135,6 +136,18 @@ fn probability_dealer_win(
     }
     return win_prob;
 
+}
+
+//function to calculate the probability of getting a blackjack on the first try
+//Args 
+//'num_deck' - number of decks in the game 
+fn probability_blackjack(num_decks: i32) -> f64{
+    let total_cards: f64 = (num_decks * 52) as f64;;
+    let aces: f64 = (num_decks * 4) as f64;
+    let ten_point: f64 =(num_decks * 16) as f64; 
+    let probability_blackjack = 
+    ((aces * ten_point) + (ten_point * aces)) / (total_cards * (total_cards - 1.0));
+    return probability_blackjack;
 }
 
 
