@@ -80,16 +80,15 @@ fn probability_dealer_win(
     //This variable tracks the sum total of all of the remaining cards?
     let total_remaining_deck: i32 = card_counts.iter().sum(); //sum all remaining decks
                                                               //println!("{total_remaining_deck}");
-    let cards_remaining = BlackjackAid::default().cards_remaining.clone();
     let mut win_prob: f64 = 0.0;
-    for (i, &val) in cards_remaining.iter().enumerate() {
+    for (i, &val) in card_counts.iter().enumerate() {
         //loop through each remaining card if exists in card_count vector deck
-        if cards_remaining[i] == 0 {
+        if card_counts[i] == 0 {
             continue;
         }
-        let mut next_card_count: Vec<i32> = cards_remaining.clone(); //create clone to prevent mutate globally
+        let mut next_card_count: Vec<i32> = card_counts.clone(); //create clone to prevent mutate globally
         next_card_count[i] -= 1;
-        let mut curr_prob: f64 = cards_remaining[i] as f64 / total_remaining_deck as f64; //calculate current probability
+        let mut curr_prob: f64 = card_counts[i] as f64 / total_remaining_deck as f64; //calculate current probability
         let mut next_total_hand: i32 = card_vals[i] + curr_dealer_hand; //sum the total value of the next dealer hand
         win_prob += curr_prob
             * probability_dealer_win(curr_hand, &next_card_count, next_total_hand);
@@ -97,6 +96,58 @@ fn probability_dealer_win(
     //win_prob *= 100.0;
     return win_prob;
 }
+
+//function to calculate the probability of getting a blackjack on the first try
+//Args 
+//'num_deck' - number of decks in the game 
+fn probability_blackjack(num_decks: i32, card_counts: &Vec<i32>) -> f64{
+    let mut total_aces: i32 = 0;
+    let mut total_tens: i32 = 0;
+    let total_remaining_deck: i32 = card_counts.iter().sum();
+    let total_cards: f64 = (num_decks * total_remaining_deck).into();
+    for i in 0..card_counts.len(){
+        if card_counts[i] != 0{
+            if i == 0{
+                total_aces = card_counts[i];
+            }
+            else if i >= 9{
+                total_tens += card_counts[i]
+            }
+        }
+
+
+    }
+    let prob_blackjack = 2.0 * (total_aces as f64 * total_tens as f64) 
+                     / (total_remaining_deck as f64 * (total_remaining_deck as f64 - 1.0));
+    return prob_blackjack;
+}
+
+//fn to provide the probability of busting 
+//Args
+//'curr_hand' - total current hand
+//'card_Val' - vector of card values with faces and numbers
+//'card_counts' - 'card counts which holds how many total cards in the vector remaining
+fn probability_busting(
+    curr_hand: i32,
+    card_counts: &Vec<i32>,
+) -> f64 {
+    let card_vals = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 10, 10, 10]; //values of the cards
+    let mut bust: f64 = 0.0;
+    let total_remaining_deck: i32 = card_counts.iter().sum();
+     for (i, &val) in card_vals.iter().enumerate(){ //loop to get val and its current index 
+        if card_counts[i] == 0{
+            continue
+        }
+        if curr_hand + val > 21{
+            bust += card_counts[i] as f64 / total_remaining_deck as f64;
+        }
+}
+    return bust;
+
+}
+
+
+
 
 struct StringToInt {
     ace_low: i32,
@@ -308,10 +359,26 @@ impl App for BlackjackAid {
                             }
                             _ => {}
                         }
+                        if let Some(index) = self.card_number.iter().position(|x| x == &self.selected_number) {
+                            if self.cards_remaining[index] != 0 {
+                                self.cards_remaining[index] -= 1;
+                            }
+}
                     }
                 if self.recorded_cards_dealer.len() >= 1 && self.recorded_cards_player1.len() >= 2{
+                     self.player1_hand_total = hand_total(self.recorded_cards_player1.clone());
+                    self.dealer_hand_total = hand_total(self.recorded_cards_dealer.clone());
                     println!("Computing probabilities!");
-                    self.bjp.prob_dealer_wins = (probability_dealer_win(self.player1_hand_total.clone(),&self.cards_remaining.clone(), self.dealer_hand_total))*100.0;
+                    self.bjp.prob_dealer_wins = (probability_dealer_win(self.player1_hand_total,&self.cards_remaining.clone(), self.dealer_hand_total))*100.0;
+                    self.bjp.prob_next_blackjack =  probability_blackjack(self.number_of_decks, &self.cards_remaining.clone()) * 100.0;
+                    self.bjp.prob_win_by_stand  = 100.0 - self.bjp.prob_dealer_wins;
+                    self.bjp.prob_bust = probability_busting(self.player1_hand_total, &self.cards_remaining) * 100.0;
+                    dbg!(
+                        &self.recorded_cards_player1,
+                        &self.recorded_cards_dealer,
+                        self.player1_hand_total,
+                        self.dealer_hand_total,
+                        &self.cards_remaining);
                 }
                 }
                 
@@ -346,6 +413,7 @@ impl App for BlackjackAid {
                 });
                 //calculates hand total
                 self.player1_hand_total = hand_total(self.recorded_cards_player1.clone());
+                println!("{:?}", self.player1_hand_total);
                 ui.label(format!("Hand Total = {}", self.player1_hand_total));
 
                 ui.separator();
@@ -356,6 +424,8 @@ impl App for BlackjackAid {
                     }
                 });
                 self.dealer_hand_total = hand_total(self.recorded_cards_dealer.clone());
+                println!("{:?}", self.dealer_hand_total);
+
                 ui.label(format!("Hand Total = {}", self.dealer_hand_total));
             });
     }
