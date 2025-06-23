@@ -1,0 +1,152 @@
+fn main() {
+    let num_decks = 1;
+    let card_vals = vec![1,2,3,4,5,6,7,8,9,10,10,10,10];
+    let mut card_counts = vec![4 * num_decks; 13];
+
+    // ── Example hand ─────────────────────────────
+    let player_cards = ["ace", "six"];   // e.g. Ace+6
+    let dealer_cards = ["seven"];        // dealer shows 7
+    // ──────────────────────────────────────────────
+
+    // Remove player’s cards & compute hard total + ace count
+    let (player_hard, player_aces) =
+        deal_initial(&player_cards, &card_vals, &mut card_counts);
+    let player_total = best_total(player_hard, player_aces);
+
+    // Remove dealer’s cards & compute hard total + ace count
+    let (dealer_hard, dealer_aces) =
+        deal_initial(&dealer_cards, &card_vals, &mut card_counts);
+    let dealer_total = best_total(dealer_hard, dealer_aces);
+
+    println!("Player stands on: {} (hard={} aces={})",
+             player_total, player_hard, player_aces);
+    println!("Dealer shows:      {} (hard={} aces={})",
+             dealer_total, dealer_hard, dealer_aces);
+    println!("Remaining deck:    {:?}", card_counts);
+
+    // Compute dealer win/tie probabilities
+    let mut counts_clone = card_counts.clone();
+    let (p_win, p_tie) = dealer_outcomes(
+        player_total,
+        dealer_hard,
+        dealer_aces,
+        &card_vals,
+        &mut counts_clone,
+    );
+    let p_lose = p_win;
+    let p_player = 1.0 - p_win - p_tie;
+
+    println!("\nP(dealer wins) = {:.4}", p_win);
+    println!("P(tie)         = {:.4}", p_tie);
+    println!("P(player wins) = {:.4}", p_player);
+}
+
+/// Deals the initial cards, updating `card_counts`, and returns
+/// (hard_total, num_aces) where each Ace counts as 1 in `hard_total`.
+fn deal_initial(
+    faces: &[&str],
+    card_vals: &[i32],
+    card_counts: &mut [i32],
+) -> (i32, usize) {
+    let mut hard = 0;
+    let mut aces = 0;
+    for &face in faces {
+        let idx = card_index(face);
+        hard += card_vals[idx];
+        if idx == 0 { aces += 1; }       // index 0 is Ace
+        card_counts[idx] -= 1;
+    }
+    (hard, aces)
+}
+
+/// Given a hard total and how many Aces you have, returns
+/// the best total (counts exactly one Ace as 11 if it doesn’t bust).
+fn best_total(hard: i32, aces: usize) -> i32 {
+    if aces > 0 && hard + 10 <= 21 {
+        hard + 10
+    } else {
+        hard
+    }
+}
+
+/// Recursively computes (P(dealer wins), P(tie)) given:
+/// - `player_total` (fixed),
+/// - `dealer_hard` & `dealer_aces` (hard sum + ace count so far),
+/// - `card_vals` & `card_counts` (mutable deck).
+fn dealer_outcomes(
+    player_total: i32,
+    dealer_hard:  i32,
+    dealer_aces:  usize,
+    card_vals:    &[i32],
+    card_counts:  &mut [i32],
+) -> (f64, f64) {
+    // Compute the “soft” total with Ace=11 if allowed
+    let total = best_total(dealer_hard, dealer_aces);
+
+    // 1) Bust → house loses
+    if total > 21 {
+        return (0.0, 0.0);
+    }
+    // 2) Stand on 17–21
+    if total >= 17 {
+        return if total > player_total {
+            (1.0, 0.0)           // dealer wins
+        } else if total == player_total {
+            (0.0, 1.0)           // tie
+        } else {
+            (0.0, 0.0)           // player wins
+        };
+    }
+    // 3) Otherwise dealer must draw
+    let left = card_counts.iter().sum::<i32>() as f64;
+    if left == 0.0 {
+        return (0.0, 0.0);
+    }
+
+    let mut p_win = 0.0;
+    let mut p_tie = 0.0;
+    for (i, &val) in card_vals.iter().enumerate() {
+        let cnt = card_counts[i];
+        if cnt == 0 { continue; }
+        let p_draw = cnt as f64 / left;
+
+        // “draw” card i
+        card_counts[i] -= 1;
+        let next_hard = dealer_hard + val;
+        let next_aces = dealer_aces + if i == 0 { 1 } else { 0 };
+
+        let (w, t) = dealer_outcomes(
+            player_total,
+            next_hard,
+            next_aces,
+            card_vals,
+            card_counts,
+        );
+        p_win += p_draw * w;
+        p_tie += p_draw * t;
+
+        // restore card
+        card_counts[i] += 1;
+    }
+    (p_win, p_tie)
+}
+
+/// Face name → deck index (0 = ace, …, 12 = king)
+fn card_index(card: &str) -> usize {
+    match card {
+        "ace"    => 0,
+        "two"    => 1,
+        "three"  => 2,
+        "four"   => 3,
+        "five"   => 4,
+        "six"    => 5,
+        "seven"  => 6,
+        "eight"  => 7,
+        "nine"   => 8,
+        "ten"    => 9,
+        "jack"   => 10,
+        "queen"  => 11,
+        "king"   => 12,
+        other    => panic!("Unknown card face: {}", other),
+    }
+}
