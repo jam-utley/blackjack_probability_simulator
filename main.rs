@@ -241,6 +241,20 @@ impl Default for BlackjackAid {
     }
 }
 
+impl eframe::App for BlackjackAid {
+    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        self.show_probabilities_window(ctx);
+
+        egui::CentralPanel::default()
+            .frame(egui::Frame::default().fill(egui::Color32::from_rgb(40, 110, 31)))
+            .show(ctx, |ui| {
+                self.show_card_selection_ui(ui);
+                self.show_reset_buttons(ui);
+                self.show_card_display_sections(ui, ctx);
+            });
+    }
+}
+
 impl BlackjackAid{
     fn show_probabilities_window(&self, ctx: &egui::Context) {
         egui::Window::new("Probabilities")
