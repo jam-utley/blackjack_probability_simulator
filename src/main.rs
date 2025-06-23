@@ -293,19 +293,26 @@ impl Default for BlackjackAid {
     }
 }
 
-impl App for BlackjackAid {
+impl eframe::App for BlackjackAid {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        let visuals = egui::Visuals {
-            //sets background color for dropown menus and windows, not the entire page
-            window_fill: egui::Color32::from_rgb(10, 10, 40),
-            ..egui::Visuals::dark()
-        };
-        ctx.set_visuals(visuals);
+        self.show_probabilities_window(ctx);
 
+        egui::CentralPanel::default()
+            .frame(egui::Frame::default().fill(egui::Color32::from_rgb(40, 110, 31)))
+            .show(ctx, |ui| {
+                self.show_card_selection_ui(ui);
+                self.show_reset_buttons(ui);
+                self.show_card_display_sections(ui, ctx);
+            });
+    }
+}
+
+impl BlackjackAid{
+    fn show_probabilities_window(&self, ctx: &egui::Context) {
         egui::Window::new("Probabilities")
             .anchor(egui::Align2::RIGHT_TOP, [-5.0, 5.0])
             .show(ctx, |ui| {
-                ui.label(format!("Probability of Bust: {:.1}%", self.bjp.prob_bust));
+                ui.label(format!("Probability of Bust: {:.2}%", self.bjp.prob_bust));
                 ui.label(format!(
                     "Probability of Immediate Blackjack: {:.1}%",
                     self.bjp.prob_next_blackjack
@@ -315,143 +322,129 @@ impl App for BlackjackAid {
                     self.bjp.prob_win_by_stand
                 ));
                 ui.label(format!(
-                    "Probability of Dealer Winning: {:.1}%",
+                    "Probability of Dealer Wins if You Stand: {:.1}%",
                     self.bjp.prob_dealer_wins
                 ));
             });
+    }
 
-        //Central panel
-        egui::CentralPanel::default()
-            .frame(egui::Frame::default().fill(egui::Color32::from_rgb(40, 110, 31))) //sets page background color
-            .show(ctx, |ui| {
-                ui.label("Choose a card:");
+    fn show_card_selection_ui(&mut self, ui: &mut egui::Ui) {
+        ui.label("Choose a card:");
 
-                ComboBox::from_label("Player/Dealer")
-                    .selected_text(&self.selected_player)
-                    .show_ui(ui, |ui| {
-                        for player in &self.player {
-                            ui.selectable_value(&mut self.selected_player, player.clone(), player);
-                        }
-                    });
-
-                ComboBox::from_label("Suit")
-                    .selected_text(&self.selected_suit)
-                    .show_ui(ui, |ui| {
-                        for suit in &self.suit {
-                            ui.selectable_value(&mut self.selected_suit, suit.clone(), suit);
-                        }
-                    });
-
-                ComboBox::from_label("Number")
-                    .selected_text(&self.selected_number)
-                    .show_ui(ui, |ui| {
-                        for number in &self.card_number {
-                            ui.selectable_value(&mut self.selected_number, number.clone(), number);
-                        }
-                    });
-
-                // Add Button
-                if ui.button("Add Card").clicked() {
-                    if self.selected_player != "Please choose a player"
-                    //appends selected number and suit to a rolling string of values
-                        && self.selected_suit != "Please select a suit"
-                        && self.selected_number != "Please select a number"
-                    {
-                        let card_id = format!(
-                            "{}_of_{}",
-                            self.selected_number.to_lowercase(),
-                            self.selected_suit.to_lowercase()
-                        );
-
-                        let label =
-                            format!("the {} of {}\n", self.selected_number, self.selected_suit);
-
-                        match self.selected_player.as_str() {
-                            "Dealer" => {
-                                self.recorded_cards_dealer.push(self.selected_number.clone());//saves the number of the card
-                                self.dealer_card_ids.push(card_id);
-                            }
-                            "Player 1" => {
-                                self.recorded_cards_player1.push(self.selected_number.clone());
-                                self.player1_card_ids.push(card_id);
-                            }
-                            _ => {}
-                        }
-                        if let Some(index) = self.card_number.iter().position(|x| x == &self.selected_number) {
-                            if self.cards_remaining[index] != 0 {
-                                self.cards_remaining[index] -= 1;
-                            }
-
+        ComboBox::from_label("Player/Dealer")
+            .selected_text(&self.selected_player)
+            .show_ui(ui, |ui| {
+                for player in &self.player {
+                    ui.selectable_value(&mut self.selected_player, player.clone(), player);
                 }
-                    }
-                if self.recorded_cards_dealer.len() >= 1 && self.recorded_cards_player1.len() >= 2{
-                     self.player1_hand_total = hand_total(self.recorded_cards_player1.clone());
-                    self.dealer_hand_total = hand_total(self.recorded_cards_dealer.clone());
-                    let remaining = self.cards_remaining.clone();
-                    println!("Computing probabilities!");
-                    self.bjp.prob_dealer_wins = (probability_dealer_win(self.player1_hand_total,&remaining, self.dealer_hand_total))*100.0;
-                    self.bjp.prob_next_blackjack =  probability_blackjack(self.number_of_decks, &remaining) * 100.0;
-                    self.bjp.prob_win_by_stand  = 100.0 - self.bjp.prob_dealer_wins;
-                    self.bjp.prob_bust = probability_busting(self.player1_hand_total, &remaining) * 100.0;
-                    dbg!(
-                        &self.recorded_cards_player1,
-                        &self.recorded_cards_dealer,
-                        self.player1_hand_total,
-                        self.dealer_hand_total,
-                        &self.cards_remaining);
-                }
-                }
-                
-                
-                
-                // Reset buttons
-                ui.separator();
-                ui.horizontal(|ui| {
-                    if ui.button("Reset Dealer").clicked() {
-                        self.recorded_cards_dealer.clear();
-                        self.dealer_card_ids.clear();
-                    }
-                    if ui.button("Reset Player").clicked() {
-                        self.recorded_cards_player1.clear();
-                        self.player1_card_ids.clear();
-                    }
-                    if ui.button("New Game").clicked() {
-                        self.recorded_cards_dealer.clear();
-                        self.recorded_cards_player1.clear();
-                        self.dealer_card_ids.clear();
-                        self.player1_card_ids.clear();
-                        self.cards_remaining.clear();
-                    }
-                });
-
-                // Display selected cards
-                ui.separator();
-                ui.label("Player Cards:");
-                ui.horizontal(|ui| {
-                    for card_id in &self.player1_card_ids {
-                        display_card(ui, ctx, card_id, &mut self.textures);
-                    }
-                });
-                //calculates hand total
-                self.player1_hand_total = hand_total(self.recorded_cards_player1.clone());
-                println!("{:?}", self.player1_hand_total);
-                ui.label(format!("Hand Total = {}", self.player1_hand_total));
-
-                ui.separator();
-                ui.label("Dealer Cards:");
-                ui.horizontal(|ui| {
-                    for card_id in &self.dealer_card_ids {
-                        display_card(ui, ctx, card_id, &mut self.textures);
-                    }
-                });
-                self.dealer_hand_total = hand_total(self.recorded_cards_dealer.clone());
-                println!("{:?}", self.dealer_hand_total);
-
-                ui.label(format!("Hand Total = {}", self.dealer_hand_total));
             });
+
+        ComboBox::from_label("Suit")
+            .selected_text(&self.selected_suit)
+            .show_ui(ui, |ui| {
+                for suit in &self.suit {
+                    ui.selectable_value(&mut self.selected_suit, suit.clone(), suit);
+                }
+            });
+
+        ComboBox::from_label("Number")
+            .selected_text(&self.selected_number)
+            .show_ui(ui, |ui| {
+                for number in &self.card_number {
+                    ui.selectable_value(&mut self.selected_number, number.clone(), number);
+                }
+            });
+
+        if ui.button("Add Card").clicked() {
+            if self.selected_player != "Please choose a player"
+                && self.selected_suit != "Please select a suit"
+                && self.selected_number != "Please select a number"
+            {
+                let card_id = format!(
+                    "{}_of_{}",
+                    self.selected_number.to_lowercase(),
+                    self.selected_suit.to_lowercase()
+                );
+
+                match self.selected_player.as_str() {
+                    "Dealer" => {
+                        self.recorded_cards_dealer.push(self.selected_number.clone());
+                        self.dealer_card_ids.push(card_id);
+                    }
+                    "Player 1" => {
+                        self.recorded_cards_player1.push(self.selected_number.clone());
+                        self.player1_card_ids.push(card_id);
+                    }
+                    _ => {}
+                }
+            }
+
+            if self.recorded_cards_dealer.len() >= 1 && self.recorded_cards_player1.len() >= 2 {
+                println!("Computing probabilities!");
+                self.bjp.prob_dealer_wins = (probability_dealer_win(
+                    self.player1_hand_total,
+                    &self.cards_remaining,
+                    self.dealer_hand_total,
+                )) * 100.0;
+
+                self.bjp.prob_win_by_stand =
+                    (1.0 - ((self.bjp.prob_dealer_wins) / 100.0)) * 100.0;
+                self.bjp.prob_bust = (probability_busting(self.player1_hand_total)) * 100.0;
+            }
+        }
+    }
+
+    fn show_reset_buttons(&mut self, ui: &mut egui::Ui) {
+        ui.separator();
+        ui.horizontal(|ui| {
+            if ui.button("Reset Dealer").clicked() {
+                self.recorded_cards_dealer.clear();
+                self.dealer_card_ids.clear();
+            }
+            if ui.button("Reset Player").clicked() {
+                self.recorded_cards_player1.clear();
+                self.player1_card_ids.clear();
+            }
+            if ui.button("New Round").clicked() {
+                self.recorded_cards_dealer.clear();
+                self.recorded_cards_player1.clear();
+                self.dealer_card_ids.clear();
+                self.player1_card_ids.clear();
+                self.bjp = BlackjackProbabilities::default();
+            }
+            if ui.button("New Game").clicked() {
+                self.recorded_cards_dealer.clear();
+                self.recorded_cards_player1.clear();
+                self.dealer_card_ids.clear();
+                self.player1_card_ids.clear();
+                self.cards_remaining = vec![4 * self.number_of_decks; 13];
+                self.bjp = BlackjackProbabilities::default();
+            }
+        });
+    }
+
+    fn show_card_display_sections(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
+        ui.separator();
+        ui.label("Player Cards:");
+        ui.horizontal(|ui| {
+            for card_id in &self.player1_card_ids {
+                display_card(ui, ctx, card_id, &mut self.textures);
+            }
+        });
+        self.player1_hand_total = hand_total(self.recorded_cards_player1.clone());
+        ui.label(format!("Hand Total = {}", self.player1_hand_total));
+
+        ui.separator();
+        ui.label("Dealer Cards:");
+        ui.horizontal(|ui| {
+            for card_id in &self.dealer_card_ids {
+                display_card(ui, ctx, card_id, &mut self.textures);
+            }
+        });
+        self.dealer_hand_total = hand_total(self.recorded_cards_dealer.clone());
+        ui.label(format!("Hand Total = {}", self.dealer_hand_total));
     }
 }
-
 fn display_card(
     ui: &mut egui::Ui,
     ctx: &egui::Context,
