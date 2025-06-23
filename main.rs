@@ -9,7 +9,7 @@ use std::path::Path;
 //incorporate probability functions
 
 fn load_texture(ctx: &egui::Context, path: &str) -> Option<TextureHandle> {
-    println!("Loading image: {}", path);
+   // println!("Loading image: {}", path);
     let img = image::open(Path::new(path)).ok()?;
     let size = [img.width() as usize, img.height() as usize];
     let rgba = img.to_rgba8().into_raw();
@@ -297,7 +297,7 @@ impl App for BlackjackAid {
                     self.bjp.prob_win_by_stand
                 ));
                 ui.label(format!(
-                    "Probability of Winning by Standing: {:.1}%",
+                    "Probability of Dealer Winning: {:.1}%",
                     self.bjp.prob_dealer_wins
                 ));
             });
@@ -363,7 +363,8 @@ impl App for BlackjackAid {
                             if self.cards_remaining[index] != 0 {
                                 self.cards_remaining[index] -= 1;
                             }
-}
+
+                }
                     }
                 if self.recorded_cards_dealer.len() >= 1 && self.recorded_cards_player1.len() >= 2{
                      self.player1_hand_total = hand_total(self.recorded_cards_player1.clone());
