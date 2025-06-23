@@ -78,7 +78,7 @@ fn probability_dealer_win(
         //println!("{:?}",curr_dealer_hand);
         return 0.0;
     }
-    //check if dealer stand if current dealer <=17 and less than or equal to 21
+    //check if dealer stand if current dealer <=17 and less than or equal to 21 so he can stand
     if curr_dealer_hand >= 17 && curr_dealer_hand <= 21 {
         if curr_dealer_hand > curr_hand {
             //check if current dealer hand is greater than players hand then return 1.0 for the weight probability
