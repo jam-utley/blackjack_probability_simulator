@@ -167,9 +167,28 @@ impl StringToInt {
     }
 }
 
-struct SimulatorStats{
-    player_wins: i32,
-    dealer_wins: i32,
+struct SimulatorStats {
+    player_wins: bool,
+    dealer_wins: bool,
+    player_bust: bool,
+    dealer_bust: bool,
+    player_dealer_tie: bool,
+    natural_blackjack: bool,
+    out_of_cards: bool,
+}
+
+impl Default for SimulatorStats {
+    fn default() -> Self {
+        Self {
+            player_wins: false,
+            dealer_wins: false,
+            player_bust: false,
+            dealer_bust: false,
+            player_dealer_tie: false,
+            natural_blackjack: false,
+            out_of_cards: false,
+        }
+    }
 }
 
 struct BlackjackProbabilities {
@@ -208,6 +227,7 @@ struct BlackjackAid {
     bjp: BlackjackProbabilities,
     textures: HashMap<String, TextureHandle>,
     forbidden_cards_sim: Vec<(i32, i32)>, //stores the cards pulled in the blackjack simulator
+    stats: SimulatorStats,
 }
 
 impl Default for BlackjackAid {
@@ -239,6 +259,7 @@ impl Default for BlackjackAid {
             bjp: BlackjackProbabilities::default(),
             textures: HashMap::new(),
             forbidden_cards_sim: Vec::new(),
+            stats: SimulatorStats::default(),
         }
     }
 }
@@ -252,116 +273,176 @@ impl App for BlackjackAid {
         };
         ctx.set_visuals(visuals);
 
+        egui::Window::new("Probabilities")
+            .anchor(egui::Align2::RIGHT_BOTTOM, [-5.0, 5.0])
+            .show(ctx, |ui| {
+                ui.label(format!("Probability of Bust: {:.2}%", self.bjp.prob_bust));
+                ui.label(format!(
+                    "Probability of Immediate Blackjack: {:.1}%",
+                    self.bjp.prob_next_blackjack
+                ));
+                ui.label(format!(
+                    "Probability of Winning by Standing: {:.1}%",
+                    self.bjp.prob_win_by_stand
+                ));
+                ui.label(format!(
+                    "Probability of Dealer Wins if You Stand: {:.1}%",
+                    self.bjp.prob_dealer_wins
+                ));
+            });
+
         egui::SidePanel::left("my_left_panel").show(ctx, |ui| {
-            ui.label(format!("{}", self.forbidden_cards_sim.len()));
+            /*ui.label(format!("Probability of Bust: {:.2}%", self.bjp.prob_bust));
+            ui.label(format!(
+                "Probability of Immediate Blackjack: {:.1}%",
+                self.bjp.prob_next_blackjack
+            ));
+            ui.label(format!(
+                "Probability of Winning by Standing: {:}%",
+                self.bjp.prob_win_by_stand
+            ));
+            ui.label(format!(
+                "Probability of Dealer Wins if You Stand: {:.1}%",
+                self.bjp.prob_dealer_wins
+            ));*/
         });
 
         egui::SidePanel::right("my_right_panel").show(ctx, |ui| {
-            if ui.button("Reset Dealer").clicked() {
-                self.recorded_cards_dealer.clear();
-                self.dealer_card_ids.clear();
-            }
-            if ui.button("Reset Player").clicked() {
-                self.recorded_cards_player1.clear();
-                self.player1_card_ids.clear();
-            }
-            if ui.button("New Round").clicked() {
-                self.recorded_cards_dealer.clear();
-                self.recorded_cards_player1.clear();
-                self.dealer_card_ids.clear();
-                self.player1_card_ids.clear();
-                self.bjp.prob_dealer_wins = 0.0;
-                self.bjp.prob_next_blackjack = 0.0;
-                self.bjp.prob_win_by_stand = 0.0;
-                self.bjp.prob_bust = 0.0;
-            }
-            if ui.button("New Game").clicked() {
-                //RESETS CARD COUNTING
-                self.recorded_cards_dealer.clear();
-                self.recorded_cards_player1.clear();
-                self.dealer_card_ids.clear();
-                self.player1_card_ids.clear();
-                self.forbidden_cards_sim.clear();
-                self.cards_remaining = vec![4 * self.number_of_decks; 13];
-                self.bjp.prob_dealer_wins = 0.0;
-                self.bjp.prob_next_blackjack = 0.0;
-                self.bjp.prob_win_by_stand = 0.0;
-                self.bjp.prob_bust = 0.0;
-            }
-            if ui.button("Start Game").clicked() {
-                //initialize player cards
-                for i in 0..2 {
-                    let (card_id, card_value, rand_suit_index, rand_card_index, out_of_cards) =
-                        player_turn(self.forbidden_cards_sim.clone());
-                    if out_of_cards == true {
-                        ui.label("Out of cards!");
-                    } else {
-                        self.forbidden_cards_sim
-                            .push((rand_suit_index, rand_card_index));
-                        //println!("{:?}", self.forbidden_cards_sim);
-                        self.player1_card_ids.push(card_id.clone());
-                        self.recorded_cards_player1.push(card_value);
-                        self.player1_hand_total = hand_total(self.recorded_cards_player1.clone());
+            ui.horizontal_centered(|ui| {
+                ui.vertical(|ui| {
+                    if ui.button("New Round").clicked() {
+                        self.recorded_cards_dealer.clear();
+                        self.recorded_cards_player1.clear();
+                        self.dealer_card_ids.clear();
+                        self.player1_card_ids.clear();
+                        self.bjp.prob_dealer_wins = 0.0;
+                        self.bjp.prob_next_blackjack = 0.0;
+                        self.bjp.prob_win_by_stand = 0.0;
+                        self.bjp.prob_bust = 0.0;
+
+                        //initializes a new hand
+                        for i in 0..2 {
+                            let (
+                                card_id,
+                                card_value,
+                                rand_suit_index,
+                                rand_card_index,
+                                out_of_cards,
+                            ) = player_turn(self.forbidden_cards_sim.clone());
+                            if out_of_cards == true {
+                                self.stats.out_of_cards = true;
+                            } else {
+                                self.forbidden_cards_sim
+                                    .push((rand_suit_index, rand_card_index));
+                                self.player1_card_ids.push(card_id.clone());
+                                self.recorded_cards_player1.push(card_value);
+                                self.player1_hand_total =
+                                    hand_total(self.recorded_cards_player1.clone());
+                            }
+                        }
+                        //initialize dealer cards
+                        let (card_id, card_value, rand_suit_index, rand_card_index, out_of_cards) =
+                            player_turn(self.forbidden_cards_sim.clone());
+                        if out_of_cards == true {
+                            self.stats.out_of_cards = true;
+                        } else {
+                            self.forbidden_cards_sim
+                                .push((rand_suit_index, rand_card_index));
+                            //println!("{:?}", self.forbidden_cards_sim);
+                            self.dealer_card_ids.push(card_id.clone());
+                            self.recorded_cards_dealer.push(card_value);
+                            self.dealer_hand_total = hand_total(self.recorded_cards_dealer.clone());
+                        }
                     }
-                }
-                //initialize dealer cards
-                let (card_id, card_value, rand_suit_index, rand_card_index, out_of_cards) =
-                    player_turn(self.forbidden_cards_sim.clone());
-                if out_of_cards == true {
-                    ui.label("Out of cards!");
-                } else {
-                    self.forbidden_cards_sim
-                        .push((rand_suit_index, rand_card_index));
-                    //println!("{:?}", self.forbidden_cards_sim);
-                    self.dealer_card_ids.push(card_id.clone());
-                    self.recorded_cards_dealer.push(card_value);
-                    self.dealer_hand_total = hand_total(self.recorded_cards_dealer.clone());
-                }
-            }
+                    if ui.button("New Game").clicked() {
+                        //RESETS CARD COUNTING
+                        self.recorded_cards_dealer.clear();
+                        self.recorded_cards_player1.clear();
+                        self.dealer_card_ids.clear();
+                        self.player1_card_ids.clear();
+                        self.forbidden_cards_sim.clear();
+                        self.cards_remaining = vec![4 * self.number_of_decks; 13];
+                        self.bjp.prob_dealer_wins = 0.0;
+                        self.bjp.prob_next_blackjack = 0.0;
+                        self.bjp.prob_win_by_stand = 0.0;
+                        self.bjp.prob_bust = 0.0;
+                    }
+                    if ui.button("Start Game").clicked() {
+                        //initialize player cards
+                        for i in 0..2 {
+                            let (
+                                card_id,
+                                card_value,
+                                rand_suit_index,
+                                rand_card_index,
+                                out_of_cards,
+                            ) = player_turn(self.forbidden_cards_sim.clone());
+                            if out_of_cards == true {
+                                ui.label("Out of cards!");
+                            } else {
+                                self.forbidden_cards_sim
+                                    .push((rand_suit_index, rand_card_index));
+                                //println!("{:?}", self.forbidden_cards_sim);
+                                self.player1_card_ids.push(card_id.clone());
+                                self.recorded_cards_player1.push(card_value);
+                                self.player1_hand_total =
+                                    hand_total(self.recorded_cards_player1.clone());
+                            }
+                        }
+                        //initialize dealer cards
+                        let (card_id, card_value, rand_suit_index, rand_card_index, out_of_cards) =
+                            player_turn(self.forbidden_cards_sim.clone());
+                        if out_of_cards == true {
+                            self.stats.out_of_cards = true;
+                        } else {
+                            self.forbidden_cards_sim
+                                .push((rand_suit_index, rand_card_index));
+                            //println!("{:?}", self.forbidden_cards_sim);
+                            self.dealer_card_ids.push(card_id.clone());
+                            self.recorded_cards_dealer.push(card_value);
+                            self.dealer_hand_total = hand_total(self.recorded_cards_dealer.clone());
+                        }
+                    }
+                });
+            });
         });
         egui::TopBottomPanel::top("my_panel_top").show(ctx, |ui| {
             ui.vertical_centered(|ui| {
                 ui.label("Dealer's Hand");
             });
         });
-        egui::TopBottomPanel::top("dealer_cards").show(ctx, |ui| {
-            ui.vertical_centered(|ui| {
-                ui.horizontal(|ui| {
-                    for card_id in &self.dealer_card_ids {
-                        display_card(ui, ctx, card_id, &mut self.textures);
-                    }
+        egui::TopBottomPanel::top("dealer_cards")
+            .frame(egui::Frame::default().fill(egui::Color32::from_rgb(40, 110, 31)))
+            .show(ctx, |ui| {
+                ui.vertical_centered(|ui| {
+                    ui.horizontal(|ui| {
+                        for card_id in &self.dealer_card_ids {
+                            display_card(ui, ctx, card_id, &mut self.textures);
+                        }
+                    });
+                    self.dealer_hand_total = hand_total(self.recorded_cards_dealer.clone());
+                    ui.label(format!("Hand Total = {}", self.dealer_hand_total));
                 });
-                self.dealer_hand_total = hand_total(self.recorded_cards_dealer.clone());
-                ui.label(format!("Hand Total = {}", self.dealer_hand_total));
             });
-        });
 
         egui::TopBottomPanel::bottom("my_panel_bottom").show(ctx, |ui| {
             ui.vertical_centered(|ui| {
                 ui.label("Player's Hand");
             });
         });
-        egui::TopBottomPanel::bottom("player_cards").show(ctx, |ui| {
-            ui.vertical_centered(|ui| {
-                ui.horizontal(|ui| {
-                    for card_id in &self.player1_card_ids {
-                        display_card(ui, ctx, card_id, &mut self.textures);
-                    }
+        egui::TopBottomPanel::bottom("player_cards")
+            .frame(egui::Frame::default().fill(egui::Color32::from_rgb(40, 110, 31)))
+            .show(ctx, |ui| {
+                ui.vertical_centered(|ui| {
+                    ui.horizontal(|ui| {
+                        for card_id in &self.player1_card_ids {
+                            display_card(ui, ctx, card_id, &mut self.textures);
+                        }
+                    });
+                    self.player1_hand_total = hand_total(self.recorded_cards_player1.clone());
+                    ui.label(format!("Hand Total = {}", self.player1_hand_total));
                 });
-                self.player1_hand_total = hand_total(self.recorded_cards_player1.clone());
-                ui.label(format!("Hand Total = {}", self.player1_hand_total));
             });
-        });
-
-        //new game button resets the cards and counter
-        //new round button resets the cards
-        //generate cards: two for player, one for dealer
-        //player hits until bust or stand
-        //when stand, dealer draws new cards until 17 -- 21 or bust.
-        //Highest hand wins
-        //new round button to play another hand
-
-        //add a gambling aspect with fake money?
 
         let button_size = eframe::egui::Vec2::new(200.0, 50.0);
         let button_color = egui::Color32::from_rgb(100, 0, 0);
@@ -389,7 +470,7 @@ impl App for BlackjackAid {
                                 out_of_cards,
                             ) = player_turn(self.forbidden_cards_sim.clone());
                             if out_of_cards == true {
-                                ui.label("Out of cards!");
+                                self.stats.out_of_cards = true;
                             } else {
                                 self.forbidden_cards_sim
                                     .push((rand_suit_index, rand_card_index));
@@ -399,8 +480,22 @@ impl App for BlackjackAid {
                                 self.player1_hand_total =
                                     hand_total(self.recorded_cards_player1.clone());
                             }
-                            println!("{:?}", self.player1_card_ids);
-                            println!("{}", self.player1_hand_total);
+                            self.bjp.prob_dealer_wins = (probability_dealer_win(
+                                self.player1_hand_total.clone(),
+                                &self.cards_remaining.clone(),
+                                self.dealer_hand_total,
+                            )) * 100.0;
+                            self.bjp.prob_win_by_stand =
+                                (1.0 - ((self.bjp.prob_dealer_wins) / 100.0)) * 100.0;
+                            self.bjp.prob_bust =
+                                (probability_busting(self.player1_hand_total.clone())) * 100.0;
+                            // println!("{:?}", self.player1_card_ids);
+                            // println!("{}", self.player1_hand_total);
+                            if self.player1_hand_total > 21 {
+                                self.stats.player_bust = true;
+                                println!("Bustin Time!");
+                                println!("{}", self.stats.player_bust);
+                            }
                         }
                     });
                     columns[1].with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
@@ -422,7 +517,7 @@ impl App for BlackjackAid {
                                     out_of_cards,
                                 ) = player_turn(self.forbidden_cards_sim.clone());
                                 if out_of_cards == true {
-                                    ui.label("Out of Cards!");
+                                    self.stats.out_of_cards = true;
                                     break;
                                 } else {
                                     self.forbidden_cards_sim
@@ -434,11 +529,389 @@ impl App for BlackjackAid {
                                         hand_total(self.recorded_cards_dealer.clone());
                                 }
                             }
-                            println!("{}", self.dealer_hand_total);
+                            if self.dealer_hand_total > 21 {
+                                self.stats.dealer_bust = true;
+                            } else {
+                                if self.dealer_hand_total > self.player1_hand_total {
+                                    self.stats.dealer_wins = true;
+                                } else if self.dealer_hand_total == self.player1_hand_total {
+                                    self.stats.player_dealer_tie = true;
+                                } else {
+                                    self.stats.player_wins = true;
+                                }
+                            }
                         }
                     });
                 });
             });
+        //pop-up windows
+        if self.stats.player_wins {
+            egui::Window::new("You win!")
+                .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
+                .open(&mut self.stats.player_wins)
+                .show(ctx, |ui| {
+                    if ui.button("New Round?").clicked() {
+                        //println!("{}", MyApp::default().show_popup);
+                        BlackjackAid::default().stats.player_wins = false;
+                        //clears cards
+                        self.recorded_cards_dealer.clear();
+                        self.recorded_cards_player1.clear();
+                        self.dealer_card_ids.clear();
+                        self.player1_card_ids.clear();
+                        self.bjp.prob_dealer_wins = 0.0;
+                        self.bjp.prob_next_blackjack = 0.0;
+                        self.bjp.prob_win_by_stand = 0.0;
+                        self.bjp.prob_bust = 0.0;
+
+                        for i in 0..2 {
+                            let (
+                                card_id,
+                                card_value,
+                                rand_suit_index,
+                                rand_card_index,
+                                out_of_cards,
+                            ) = player_turn(self.forbidden_cards_sim.clone());
+                            if out_of_cards == true {
+                                self.stats.out_of_cards = true;
+                            } else {
+                                self.forbidden_cards_sim
+                                    .push((rand_suit_index, rand_card_index));
+                                //println!("{:?}", self.forbidden_cards_sim);
+                                self.player1_card_ids.push(card_id.clone());
+                                self.recorded_cards_player1.push(card_value);
+                                self.player1_hand_total =
+                                    hand_total(self.recorded_cards_player1.clone());
+                            }
+                        }
+                        //initialize dealer cards
+                        let (card_id, card_value, rand_suit_index, rand_card_index, out_of_cards) =
+                            player_turn(self.forbidden_cards_sim.clone());
+                        if out_of_cards == true {
+                            self.stats.out_of_cards = true;
+                        } else {
+                            self.forbidden_cards_sim
+                                .push((rand_suit_index, rand_card_index));
+                            //println!("{:?}", self.forbidden_cards_sim);
+                            self.dealer_card_ids.push(card_id.clone());
+                            self.recorded_cards_dealer.push(card_value);
+                            self.dealer_hand_total = hand_total(self.recorded_cards_dealer.clone());
+                        }
+                    }
+                });
+        }
+        if self.stats.dealer_wins {
+            egui::Window::new("Dealer wins!")
+                .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
+                .open(&mut self.stats.dealer_wins)
+                .show(ctx, |ui| {
+                    if ui.button("New Round?").clicked() {
+                        //println!("{}", MyApp::default().show_popup);
+                        BlackjackAid::default().stats.dealer_wins = false;
+                        self.recorded_cards_dealer.clear();
+                        self.recorded_cards_player1.clear();
+                        self.dealer_card_ids.clear();
+                        self.player1_card_ids.clear();
+                        self.bjp.prob_dealer_wins = 0.0;
+                        self.bjp.prob_next_blackjack = 0.0;
+                        self.bjp.prob_win_by_stand = 0.0;
+                        self.bjp.prob_bust = 0.0;
+
+                        for i in 0..2 {
+                            let (
+                                card_id,
+                                card_value,
+                                rand_suit_index,
+                                rand_card_index,
+                                out_of_cards,
+                            ) = player_turn(self.forbidden_cards_sim.clone());
+                            if out_of_cards == true {
+                                self.stats.out_of_cards = true;
+                            } else {
+                                self.forbidden_cards_sim
+                                    .push((rand_suit_index, rand_card_index));
+                                //println!("{:?}", self.forbidden_cards_sim);
+                                self.player1_card_ids.push(card_id.clone());
+                                self.recorded_cards_player1.push(card_value);
+                                self.player1_hand_total =
+                                    hand_total(self.recorded_cards_player1.clone());
+                            }
+                        }
+                        //initialize dealer cards
+                        let (card_id, card_value, rand_suit_index, rand_card_index, out_of_cards) =
+                            player_turn(self.forbidden_cards_sim.clone());
+                        if out_of_cards == true {
+                            self.stats.out_of_cards = true;
+                        } else {
+                            self.forbidden_cards_sim
+                                .push((rand_suit_index, rand_card_index));
+                            //println!("{:?}", self.forbidden_cards_sim);
+                            self.dealer_card_ids.push(card_id.clone());
+                            self.recorded_cards_dealer.push(card_value);
+                            self.dealer_hand_total = hand_total(self.recorded_cards_dealer.clone());
+                        }
+                    }
+                });
+        }
+        if self.stats.player_bust {
+            egui::Window::new("You've Busted!")
+                .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
+                .open(&mut self.stats.player_bust)
+                .show(ctx, |ui| {
+                    if ui.button("New Round?").clicked() {
+                        //println!("{}", MyApp::default().show_popup);
+                        BlackjackAid::default().stats.player_bust = false;
+                        self.recorded_cards_dealer.clear();
+                        self.recorded_cards_player1.clear();
+                        self.dealer_card_ids.clear();
+                        self.player1_card_ids.clear();
+                        self.bjp.prob_dealer_wins = 0.0;
+                        self.bjp.prob_next_blackjack = 0.0;
+                        self.bjp.prob_win_by_stand = 0.0;
+                        self.bjp.prob_bust = 0.0;
+
+                        for i in 0..2 {
+                            let (
+                                card_id,
+                                card_value,
+                                rand_suit_index,
+                                rand_card_index,
+                                out_of_cards,
+                            ) = player_turn(self.forbidden_cards_sim.clone());
+                            if out_of_cards == true {
+                                self.stats.out_of_cards = true;
+                            } else {
+                                self.forbidden_cards_sim
+                                    .push((rand_suit_index, rand_card_index));
+                                //println!("{:?}", self.forbidden_cards_sim);
+                                self.player1_card_ids.push(card_id.clone());
+                                self.recorded_cards_player1.push(card_value);
+                                self.player1_hand_total =
+                                    hand_total(self.recorded_cards_player1.clone());
+                            }
+                        }
+                        //initialize dealer cards
+                        let (card_id, card_value, rand_suit_index, rand_card_index, out_of_cards) =
+                            player_turn(self.forbidden_cards_sim.clone());
+                        if out_of_cards == true {
+                            self.stats.out_of_cards = true;
+                        } else {
+                            self.forbidden_cards_sim
+                                .push((rand_suit_index, rand_card_index));
+                            //println!("{:?}", self.forbidden_cards_sim);
+                            self.dealer_card_ids.push(card_id.clone());
+                            self.recorded_cards_dealer.push(card_value);
+                            self.dealer_hand_total = hand_total(self.recorded_cards_dealer.clone());
+                        }
+                    }
+                });
+        }
+        if self.stats.dealer_bust {
+            egui::Window::new("Dealer Busts! You win!")
+                .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
+                .open(&mut self.stats.dealer_bust)
+                .show(ctx, |ui| {
+                    if ui.button("New Round?").clicked() {
+                        //println!("{}", MyApp::default().show_popup);
+                        BlackjackAid::default().stats.dealer_bust = false;
+                        self.recorded_cards_dealer.clear();
+                        self.recorded_cards_player1.clear();
+                        self.dealer_card_ids.clear();
+                        self.player1_card_ids.clear();
+                        self.bjp.prob_dealer_wins = 0.0;
+                        self.bjp.prob_next_blackjack = 0.0;
+                        self.bjp.prob_win_by_stand = 0.0;
+                        self.bjp.prob_bust = 0.0;
+
+                        for i in 0..2 {
+                            let (
+                                card_id,
+                                card_value,
+                                rand_suit_index,
+                                rand_card_index,
+                                out_of_cards,
+                            ) = player_turn(self.forbidden_cards_sim.clone());
+                            if out_of_cards == true {
+                                self.stats.out_of_cards = true;
+                            } else {
+                                self.forbidden_cards_sim
+                                    .push((rand_suit_index, rand_card_index));
+                                //println!("{:?}", self.forbidden_cards_sim);
+                                self.player1_card_ids.push(card_id.clone());
+                                self.recorded_cards_player1.push(card_value);
+                                self.player1_hand_total =
+                                    hand_total(self.recorded_cards_player1.clone());
+                            }
+                        }
+                        //initialize dealer cards
+                        let (card_id, card_value, rand_suit_index, rand_card_index, out_of_cards) =
+                            player_turn(self.forbidden_cards_sim.clone());
+                        if out_of_cards == true {
+                            self.stats.out_of_cards = true;
+                        } else {
+                            self.forbidden_cards_sim
+                                .push((rand_suit_index, rand_card_index));
+                            //println!("{:?}", self.forbidden_cards_sim);
+                            self.dealer_card_ids.push(card_id.clone());
+                            self.recorded_cards_dealer.push(card_value);
+                            self.dealer_hand_total = hand_total(self.recorded_cards_dealer.clone());
+                        }
+                    }
+                });
+        }
+        if self.stats.player_dealer_tie {
+            egui::Window::new("You tie!")
+                .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
+                .open(&mut self.stats.player_dealer_tie)
+                .show(ctx, |ui| {
+                    if ui.button("New Round?").clicked() {
+                        //println!("{}", MyApp::default().show_popup);
+                        BlackjackAid::default().stats.player_dealer_tie = false;
+                        self.recorded_cards_dealer.clear();
+                        self.recorded_cards_player1.clear();
+                        self.dealer_card_ids.clear();
+                        self.player1_card_ids.clear();
+                        self.bjp.prob_dealer_wins = 0.0;
+                        self.bjp.prob_next_blackjack = 0.0;
+                        self.bjp.prob_win_by_stand = 0.0;
+                        self.bjp.prob_bust = 0.0;
+
+                        for i in 0..2 {
+                            let (
+                                card_id,
+                                card_value,
+                                rand_suit_index,
+                                rand_card_index,
+                                out_of_cards,
+                            ) = player_turn(self.forbidden_cards_sim.clone());
+                            if out_of_cards == true {
+                                self.stats.out_of_cards = true;
+                            } else {
+                                self.forbidden_cards_sim
+                                    .push((rand_suit_index, rand_card_index));
+                                //println!("{:?}", self.forbidden_cards_sim);
+                                self.player1_card_ids.push(card_id.clone());
+                                self.recorded_cards_player1.push(card_value);
+                                self.player1_hand_total =
+                                    hand_total(self.recorded_cards_player1.clone());
+                            }
+                        }
+                        //initialize dealer cards
+                        let (card_id, card_value, rand_suit_index, rand_card_index, out_of_cards) =
+                            player_turn(self.forbidden_cards_sim.clone());
+                        if out_of_cards == true {
+                            self.stats.out_of_cards = true;
+                        } else {
+                            self.forbidden_cards_sim
+                                .push((rand_suit_index, rand_card_index));
+                            //println!("{:?}", self.forbidden_cards_sim);
+                            self.dealer_card_ids.push(card_id.clone());
+                            self.recorded_cards_dealer.push(card_value);
+                            self.dealer_hand_total = hand_total(self.recorded_cards_dealer.clone());
+                        }
+                    }
+                });
+        }
+        if self.stats.natural_blackjack {
+            egui::Window::new("You win! Natural Blackjack!")
+                .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
+                .open(&mut self.stats.natural_blackjack)
+                .show(ctx, |ui| {
+                    if ui.button("New Round?").clicked() {
+                        //println!("{}", MyApp::default().show_popup);
+                        BlackjackAid::default().stats.natural_blackjack = false;
+                        self.recorded_cards_dealer.clear();
+                        self.recorded_cards_player1.clear();
+                        self.dealer_card_ids.clear();
+                        self.player1_card_ids.clear();
+                        self.bjp.prob_dealer_wins = 0.0;
+                        self.bjp.prob_next_blackjack = 0.0;
+                        self.bjp.prob_win_by_stand = 0.0;
+                        self.bjp.prob_bust = 0.0;
+
+                        for i in 0..2 {
+                            let (
+                                card_id,
+                                card_value,
+                                rand_suit_index,
+                                rand_card_index,
+                                out_of_cards,
+                            ) = player_turn(self.forbidden_cards_sim.clone());
+                            if out_of_cards == true {
+                                self.stats.out_of_cards = true;
+                            } else {
+                                self.forbidden_cards_sim
+                                    .push((rand_suit_index, rand_card_index));
+                                //println!("{:?}", self.forbidden_cards_sim);
+                                self.player1_card_ids.push(card_id.clone());
+                                self.recorded_cards_player1.push(card_value);
+                                self.player1_hand_total =
+                                    hand_total(self.recorded_cards_player1.clone());
+                            }
+                        }
+                        //initialize dealer cards
+                        let (card_id, card_value, rand_suit_index, rand_card_index, out_of_cards) =
+                            player_turn(self.forbidden_cards_sim.clone());
+                        if out_of_cards == true {
+                            self.stats.out_of_cards = true;
+                        } else {
+                            self.forbidden_cards_sim
+                                .push((rand_suit_index, rand_card_index));
+                            //println!("{:?}", self.forbidden_cards_sim);
+                            self.dealer_card_ids.push(card_id.clone());
+                            self.recorded_cards_dealer.push(card_value);
+                            self.dealer_hand_total = hand_total(self.recorded_cards_dealer.clone());
+                        }
+                    }
+                });
+        }
+        if self.stats.out_of_cards {
+            egui::Window::new("There are no more cards in the deck!")
+                .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
+                .open(&mut self.stats.out_of_cards)
+                .show(ctx, |ui| {
+                    if ui.button("New Game?").clicked() {
+                        //println!("{}", MyApp::default().show_popup);
+                        BlackjackAid::default().stats.out_of_cards = false;
+                        //RESETS CARD COUNTING
+                        self.recorded_cards_dealer.clear();
+                        self.recorded_cards_player1.clear();
+                        self.dealer_card_ids.clear();
+                        self.player1_card_ids.clear();
+                        self.forbidden_cards_sim.clear();
+                        self.cards_remaining = vec![4 * self.number_of_decks; 13];
+                        self.bjp.prob_dealer_wins = 0.0;
+                        self.bjp.prob_next_blackjack = 0.0;
+                        self.bjp.prob_win_by_stand = 0.0;
+                        self.bjp.prob_bust = 0.0;
+
+                        for i in 0..2 {
+                            let (
+                                card_id,
+                                card_value,
+                                rand_suit_index,
+                                rand_card_index,
+                                out_of_cards,
+                            ) = player_turn(self.forbidden_cards_sim.clone());
+                            self.forbidden_cards_sim
+                                .push((rand_suit_index, rand_card_index));
+                            //println!("{:?}", self.forbidden_cards_sim);
+                            self.player1_card_ids.push(card_id.clone());
+                            self.recorded_cards_player1.push(card_value);
+                            self.player1_hand_total =
+                                hand_total(self.recorded_cards_player1.clone());
+                        }
+                        //initialize dealer cards
+                        let (card_id, card_value, rand_suit_index, rand_card_index, out_of_cards) =
+                            player_turn(self.forbidden_cards_sim.clone());
+                        self.forbidden_cards_sim
+                            .push((rand_suit_index, rand_card_index));
+                        //println!("{:?}", self.forbidden_cards_sim);
+                        self.dealer_card_ids.push(card_id.clone());
+                        self.recorded_cards_dealer.push(card_value);
+                        self.dealer_hand_total = hand_total(self.recorded_cards_dealer.clone());
+                    }
+                });
+        }
     }
 }
 
