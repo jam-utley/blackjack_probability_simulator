@@ -1,4 +1,6 @@
-use eframe::egui::{self, Color32, ColorImage, Context, FontId, Pos2, TextureHandle, TextureOptions};
+use eframe::egui::{
+    self, Color32, ColorImage, Context, FontId, Pos2, TextureHandle, TextureOptions,
+};
 use eframe::{run_native, App, Frame, NativeOptions};
 use egui::ComboBox;
 use egui::Vec2;
@@ -131,6 +133,7 @@ impl Default for BlackjackProbabilities {
 }
 
 struct BlackjackAid {
+    start_screen: bool,
     textures: HashMap<String, TextureHandle>,
     player: Vec<String>, //Picks between player and the dealer
     selected_player: String,
@@ -177,6 +180,7 @@ impl Default for BlackjackAid {
             .collect();
 
         Self {
+            start_screen: true,
             falling_symbols,
             frame_count: 0,
             textures: HashMap::new(),
@@ -209,64 +213,81 @@ impl Default for BlackjackAid {
 
 impl App for BlackjackAid {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut Frame) {
-        // Set custom dark visuals
-        ctx.set_visuals(egui::Visuals {
-            window_fill: egui::Color32::from_rgb(10, 80, 10),
-            ..egui::Visuals::dark()
-        });
 
-        // ✅ Draw symbols directly on background layer
-        {
-            let screen_rect = ctx.screen_rect();
-            let painter = ctx.layer_painter(egui::LayerId::background());
+        //setting up beginning game screen
+        if self.start_screen {
+            egui::CentralPanel::default().show(ctx, |ui| {
+                ui.vertical_centered(|ui| {
+                    ui.heading("hi");
+                    ui.label("Press enter");
+                });
+            });
 
-            for symbol in &mut self.falling_symbols {
-                symbol.pos.y += symbol.velocity;
-                if symbol.pos.y > screen_rect.bottom() {
-                    symbol.pos.y = 0.0;
-                    symbol.pos.x = rand::thread_rng().gen_range(0.0..screen_rect.right());
-                }
-
-                painter.text(
-                    symbol.pos,
-                    egui::Align2::CENTER_CENTER,
-                    symbol.symbol,
-                    egui::FontId::proportional(24.0),
-                    symbol.color,
-                );
+            if ctx.input(|i| i.key_pressed(egui::Key::Enter)) {
+                self.start_screen = false;
             }
+
+            //once pressed loops into main visuals 
+        } else {
+            // Set custom dark visuals
+            ctx.set_visuals(egui::Visuals {
+                window_fill: egui::Color32::from_rgb(10, 80, 10),
+                ..egui::Visuals::dark()
+
+
+            });
+
+            {
+                let screen_rect = ctx.screen_rect();
+                let painter = ctx.layer_painter(egui::LayerId::background());
+
+                painter.rect_filled(screen_rect, 0.0, egui::Color32::from_rgb(41,55,59));
+
+                for symbol in &mut self.falling_symbols {
+                    symbol.pos.y += symbol.velocity;
+                    if symbol.pos.y > screen_rect.bottom() {
+                        symbol.pos.y = 0.0;
+                        symbol.pos.x = rand::thread_rng().gen_range(0.0..screen_rect.right());
+                    }
+
+                    painter.text(
+                        symbol.pos,
+                        egui::Align2::CENTER_CENTER,
+                        symbol.symbol,
+                        egui::FontId::proportional(24.0),
+                        symbol.color,
+                    );
+                }
+            }
+
+            // UI on top of the background
+            egui::TopBottomPanel::top("top_controls").show(ctx, |ui| {
+                ui.horizontal(|ui| {
+                    ui.label(
+                        egui::RichText::new("Blackjack Assistant")
+                            .heading()
+                            .color(egui::Color32::GOLD),
+                    );
+                });
+            });
+
+            egui::Window::new("Controls")
+                .anchor(egui::Align2::LEFT_TOP, [15.0, 20.0])
+                .resizable(false)
+                .collapsible(true)
+                .show(ctx, |ui| {
+                    self.show_card_selection_ui(ui);
+                    self.show_reset_buttons(ui);
+                    self.show_card_display_sections(ui, ctx);
+                });
+
+            self.show_probabilities_window(ctx);
+
+            // Repaint for animation
+            ctx.request_repaint();
         }
-
-        // UI on top of the background
-        egui::TopBottomPanel::top("top_controls").show(ctx, |ui| {
-            ui.horizontal(|ui| {
-                ui.label(
-                    egui::RichText::new("Blackjack Assistant")
-                        .heading()
-                        .color(egui::Color32::GOLD),
-                );
-            });
-        });
-
-        egui::Window::new("Controls")
-            .anchor(egui::Align2::LEFT_TOP, [10.0, 10.0])
-            .resizable(false)
-            .collapsible(true)
-            .show(ctx, |ui| {
-                self.show_card_selection_ui(ui);
-                self.show_reset_buttons(ui);
-                self.show_card_display_sections(ui, ctx);
-            });
-
-         self.show_probabilities_window(ctx);
-
-        // Repaint for animation
-        ctx.request_repaint();
     }
 }
-
-
-
 
 impl BlackjackAid {
     fn show_probabilities_window(&self, ctx: &egui::Context) {
@@ -486,7 +507,7 @@ fn display_card(
             .fill(egui::Color32::WHITE)
             .inner_margin(egui::Margin::same(1.0))
             .rounding(egui::Rounding::same(5.0))
-            .stroke(egui::Stroke::new(1.0, egui::Color32::GREEN));
+            .stroke(egui::Stroke::new(1.0, egui::Color32::BLACK));
         frame.show(ui, |ui| {
             ui.add(egui::Image::new(tex).fit_to_exact_size(egui::vec2(80.0, 110.0)));
         });
