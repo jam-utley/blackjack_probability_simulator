@@ -39,20 +39,23 @@ fn hand_total(input: Vec<String>) -> i32 {
 
 /// Probability next-card gives you a blackjack (21) from your current total.
 fn probability_next_blackjack(player_total: i32, cards_remaining: &Vec<i32>) -> f64 {
+    let mut prob: f64 = 0.0;
     let total_cards: i32 = cards_remaining.iter().sum();
     if total_cards == 0 { return 0.0; }
     match player_total {
         10 => {
             // need an ace
-            cards_remaining[0] as f64 / total_cards as f64
+            prob+=cards_remaining[13] as f64 / total_cards as f64
         }
         11 => {
             // need a ten-value
             let tens = cards_remaining[9] + cards_remaining[10] + cards_remaining[11] + cards_remaining[12];
-            tens as f64 / total_cards as f64
+            
+            prob+=tens as f64 / total_cards as f64
         }
         _ => 0.0,
     }
+    return prob
 }
 
 /// Computes (win_prob, tie_prob) for dealer given player's total, deck counts, and dealer total.
