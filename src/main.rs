@@ -370,15 +370,9 @@ impl App for BlackjackAid {
                     let (w, t) = probability_dealer_outcomes(self.player1_hand_total, &remaining, self.dealer_hand_total);
                 self.bjp.prob_dealer_wins = w * 100.0;
                 self.bjp.prob_tie = t * 100.0;
-                    self.bjp.prob_next_blackjack =  probability_blackjack(self.number_of_decks, &remaining) * 100.0;
+                    self.bjp.prob_next_blackjack =  probability_next_blackjack(self.player1_hand_total, &remaining) * 100.0;
                     self.bjp.prob_win_by_stand  = 100.0 - self.bjp.prob_dealer_wins;
                     self.bjp.prob_bust = probability_busting(self.player1_hand_total, &remaining) * 100.0;
-                    dbg!(
-                        &self.recorded_cards_player1,
-                        &self.recorded_cards_dealer,
-                        self.player1_hand_total,
-                        self.dealer_hand_total,
-                        &self.cards_remaining);
                 }
                 }
                 
