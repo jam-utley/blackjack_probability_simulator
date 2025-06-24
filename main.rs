@@ -2,7 +2,7 @@ use eframe::egui::{self, ColorImage, ComboBox, TextureHandle, TextureOptions};
 use eframe::{App, NativeOptions};
 use std::collections::HashMap;
 use std::path::Path;
-
+use egui::ViewportBuilder;
 //things to do:
 //finish card counting function
 //add New Round button
@@ -202,6 +202,8 @@ struct BlackjackAid {
     visuals_dogs: bool,
     selected_dog: usize,
     visuals_set: bool,
+
+    poker_table: Option<TextureHandle>,
 }
 
 struct Puppies {
@@ -218,6 +220,7 @@ struct Puppies {
 impl Default for BlackjackAid {
     fn default() -> Self {
         Self {
+            poker_table: None,
             player: vec!["Dealer".into(), "Player 1".into()],
             selected_player: "Please choose a player".into(),
             selected_suit: "Please select a suit".into(),
@@ -247,6 +250,31 @@ impl Default for BlackjackAid {
             visuals_set: false,
             dogs: Vec::new(),
         }
+    }
+}
+
+impl BlackjackAid {
+    pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
+        let mut instance = Self::default();
+
+        // Load poker_table texture here
+        let ctx = &cc.egui_ctx;
+        let image = image::load_from_memory(include_bytes!("../assets/poker_table.png"))
+            .expect("Failed to load image")
+            .to_rgba8();
+
+        let size = [image.width() as usize, image.height() as usize];
+        let pixels = image.into_vec();
+
+        let texture = cc.egui_ctx.load_texture(
+            "poker_table",
+            egui::ColorImage::from_rgba_unmultiplied(size, &pixels),
+            Default::default(),
+        );
+
+        instance.poker_table = Some(texture);
+
+        instance
     }
 }
 
@@ -342,152 +370,25 @@ impl App for BlackjackAid {
             });
 
         //Central panel
-        egui::CentralPanel::default()
-            .frame(egui::Frame::default().fill(egui::Color32::from_rgb(40, 110, 31))) //sets page background color
-            .show(ctx, |ui| {
-                ui.checkbox(&mut self.visuals_dogs, "Show Dogs");
+        egui::CentralPanel::default().show(ctx, |ui| {
+            let rect = ui.max_rect();
 
-                let painter = ui.painter_at(ui.available_rect_before_wrap());
+            // 1. Try drawing image
+            if let Some(tex) = &self.poker_table {
+                ui.label("✅ Texture is loaded. Drawing image.");
+                ui.painter()
+                    .image(tex.id(), rect, rect, egui::Color32::WHITE);
+            } else {
+                ui.label("❌ Texture not loaded.");
+            }
 
-                let delta_time = ctx.input(|i| i.stable_dt);
+            // 2. Green overlay with transparency (optional)
+            let overlay = egui::Color32::from_rgba_unmultiplied(40, 110, 31, 160);
+            ui.painter().rect_filled(rect, 0.0, overlay);
 
-                for (i, dog) in self.dogs.iter_mut().enumerate() {
-                    // Step animation frame every 0.1s
-                    dog.frame_timer += delta_time;
-                    if dog.frame_timer > 0.3 {
-                        dog.current_frame = (dog.current_frame + 1) % dog.total_frames;
-                        dog.frame_timer = 0.0;
-                    }
-
-                    let rect = egui::Rect::from_min_size(
-                        egui::pos2(dog.x, dog.y),
-                        egui::vec2(dog.frame_width as f32, dog.frame_height as f32),
-                    );
-
-                    // UV coords to crop the frame from the sprite sheet
-                    let columns = 7;
-                    let rows = 4;
-                    let sheet_width = 518.0;
-                    let sheet_height = 512.0;
-
-                    let col = (dog.current_frame % columns) as f32;
-                    let row = (dog.current_frame / columns) as f32;
-
-                    let uv_width = dog.frame_width as f32 / sheet_width;
-                    let uv_height = dog.frame_height as f32 / sheet_height;
-
-                    let u0 = col * uv_width;
-                    let v0 = row * uv_height;
-                    let u1 = u0 + uv_width;
-                    let v1 = v0 + uv_height;
-
-                    let uv_rect = egui::Rect::from_min_max(egui::pos2(u0, v0), egui::pos2(u1, v1));
-
-                    // Draw dog sprite frame
-                    painter.image(dog.sprite_sheet.id(), rect, uv_rect, egui::Color32::WHITE);
-
-                }
-
-                ui.label("Choose a card:");
-
-                ComboBox::from_label("Player/Dealer")
-                    .selected_text(&self.selected_player)
-                    .show_ui(ui, |ui| {
-                        for player in &self.player {
-                            ui.selectable_value(&mut self.selected_player, player.clone(), player);
-                        }
-                    });
-
-                ComboBox::from_label("Suit")
-                    .selected_text(&self.selected_suit)
-                    .show_ui(ui, |ui| {
-                        for suit in &self.suit {
-                            ui.selectable_value(&mut self.selected_suit, suit.clone(), suit);
-                        }
-                    });
-
-                ComboBox::from_label("Number")
-                    .selected_text(&self.selected_number)
-                    .show_ui(ui, |ui| {
-                        for number in &self.card_number {
-                            ui.selectable_value(&mut self.selected_number, number.clone(), number);
-                        }
-                    });
-
-                // Add Button
-                if ui.button("Add Card").clicked() {
-                    if self.selected_player != "Please choose a player"
-                    //appends selected number and suit to a rolling string of values
-                        && self.selected_suit != "Please select a suit"
-                        && self.selected_number != "Please select a number"
-                    {
-                        let card_id = format!(
-                            "{}_of_{}",
-                            self.selected_number.to_lowercase(),
-                            self.selected_suit.to_lowercase()
-                        );
-
-                        let label =
-                            format!("the {} of {}\n", self.selected_number, self.selected_suit);
-
-                        match self.selected_player.as_str() {
-                            "Dealer" => {
-                                self.recorded_cards_dealer
-                                    .push(self.selected_number.clone()); //saves the number of the card
-                                self.dealer_card_ids.push(card_id);
-                            }
-                            "Player 1" => {
-                                self.recorded_cards_player1
-                                    .push(self.selected_number.clone());
-                                self.player1_card_ids.push(card_id);
-                            }
-                            _ => {}
-                        }
-                        //self.bjp.prob_dealer_wins = probability_dealer_win(self.player1_hand_total.clone(),self.record)//add rest of stuff
-                    }
-                }
-
-                // Reset buttons
-                ui.separator();
-                ui.horizontal(|ui| {
-                    if ui.button("Reset Dealer").clicked() {
-                        self.recorded_cards_dealer.clear();
-                        self.dealer_card_ids.clear();
-                    }
-                    if ui.button("Reset Player").clicked() {
-                        self.recorded_cards_player1.clear();
-                        self.player1_card_ids.clear();
-                    }
-                    if ui.button("New Game").clicked() {
-                        self.recorded_cards_dealer.clear();
-                        self.recorded_cards_player1.clear();
-                        self.dealer_card_ids.clear();
-                        self.player1_card_ids.clear();
-                    }
-                });
-
-                // Display selected cards
-                ui.separator();
-                ui.label("Player Cards:");
-                ui.horizontal(|ui| {
-                    for card_id in &self.player1_card_ids {
-                        display_card(ui, ctx, card_id, &mut self.textures);
-                    }
-                });
-                //calculates hand total
-                self.player1_hand_total = hand_total(self.recorded_cards_player1.clone());
-                ui.label(format!("Hand Total = {}", self.player1_hand_total));
-
-                ui.separator();
-                ui.label("Dealer Cards:");
-                ui.horizontal(|ui| {
-                    for card_id in &self.dealer_card_ids {
-                        display_card(ui, ctx, card_id, &mut self.textures);
-                    }
-                });
-                self.dealer_hand_total = hand_total(self.recorded_cards_dealer.clone());
-                ui.label(format!("Hand Total = {}", self.dealer_hand_total));
-            });
+            // 3. Add dummy UI
+            ui.label("UI overlays here.");
+        });
     }
 }
 
@@ -501,7 +402,6 @@ fn display_card(
 
     if !textures.contains_key(&path) {
         if let Some(tex) = load_texture(ctx, &path) {
-
             textures.insert(path.clone(), tex);
         } else {
             ui.label(format!("PNG not found: {}", card));
@@ -522,17 +422,16 @@ fn display_card(
 }
 
 fn main() {
-    let options = NativeOptions {
+    let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
-            .with_inner_size([900.0, 720.0])
-            //.with_resizable(true) // 🔥 enable fullscreen here
-            .with_fullscreen(true),
+            .with_inner_size([1000.0, 750.0]) //initial window size when opened
+            .with_resizable(true), //allows window to be resizable
         ..Default::default()
     };
-
     eframe::run_native(
         "Blackjack Assistant",
         options,
-        Box::new(|_cc| Box::new(BlackjackAid::default())),
+        Box::new(|cc| Box::new(BlackjackAid::new(cc))),
     );
 }
+
