@@ -37,26 +37,69 @@ fn hand_total(input: Vec<String>) -> i32 {
     }
 }
 
+
+fn probability_busting(
+    curr_hand: i32,
+    card_counts: &Vec<i32>,
+) -> f64 {
+    let card_vals = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 10, 10, 10,11];
+    let mut bust: f64 = 0.0;
+    let total_remaining_deck: i32 = card_counts.iter().sum();
+     for (i, &val) in card_vals.iter().enumerate(){ //loop to get val and its current index 
+        if card_counts[i] == 0{
+            continue
+        }
+        let mut draw: i32 = val;
+        if draw == 11 && curr_hand + val > 21{
+            draw=1    //decrement by 10 for 1 for low ace 
+        }
+        if curr_hand + draw > 21{
+            bust += card_counts[i] as f64 / total_remaining_deck as f64;
+        }
+}
+    return bust;
+
+}
+
 /// Probability next-card gives you a blackjack (21) from your current total.
 fn probability_next_blackjack(player_total: i32, cards_remaining: &Vec<i32>) -> f64 {
-    let mut prob: f64 = 0.0;
     let total_cards: i32 = cards_remaining.iter().sum();
     if total_cards == 0 { return 0.0; }
-    match player_total {
+
+    let prob = match player_total {
         10 => {
             // need an ace
-            prob+=cards_remaining[13] as f64 / total_cards as f64
+            cards_remaining[13] as f64 / total_cards as f64
         }
         11 => {
-            // need a ten-value
+            // need a ten-value card: 10, Jack, Queen, King
             let tens = cards_remaining[9] + cards_remaining[10] + cards_remaining[11] + cards_remaining[12];
-            
-            prob+=tens as f64 / total_cards as f64
+            tens as f64 / total_cards as f64
         }
         _ => 0.0,
-    }
-    return prob
+    };
+
+    return prob;
 }
+
+
+fn probability_blackjack(num_decks: i32, card_counts: &Vec<i32>) -> f64{
+    let mut total_aces: i32 = 0;
+    let mut total_tens: i32 = 0;
+    let total_remaining_deck: i32 = card_counts.iter().sum();
+    let total_cards = total_remaining_deck as f64;
+    
+     let total_aces = card_counts[12];
+    let total_tens = card_counts[8..=11].iter().sum::<i32>();
+    if total_remaining_deck < 2 {
+        return 0.0;
+    }
+    let prob_blackjack = 2.0 * (total_aces as f64 * total_tens as f64)
+        / (total_cards * (total_cards - 1.0));
+
+    prob_blackjack
+}
+
 
 /// Computes (win_prob, tie_prob) for dealer given player's total, deck counts, and dealer total.
 fn probability_dealer_outcomes(
@@ -100,6 +143,7 @@ impl StringToInt {
     }
     fn get_value(&self, name: &str) -> Option<i32> {
         match name {
+            "1" => Some(self.ace_low),
             "2" => Some(self.two), "3" => Some(self.three), "4" => Some(self.four),
             "5" => Some(self.five), "6" => Some(self.six), "7" => Some(self.seven),
             "8" => Some(self.eight), "9" => Some(self.nine), "10" => Some(self.ten),
@@ -147,7 +191,7 @@ impl Default for BlackjackAid {
             recorded_cards_dealer: Vec::new(), recorded_cards_player1: Vec::new(),
             dealer_card_ids: Vec::new(), player1_card_ids: Vec::new(),
             player1_hand_total: 0, dealer_hand_total: 0,
-            number_of_decks: decks, cards_remaining: vec![4*decks;13],
+            number_of_decks: decks, cards_remaining: vec![4*decks;14],
             bjp: BlackjackProbabilities::default(), textures: HashMap::new(),
         }
     }
@@ -166,11 +210,11 @@ impl App for BlackjackAid {
 impl BlackjackAid {
     fn show_probabilities_window(&self, ctx: &egui::Context) {
         egui::Window::new("Probabilities").anchor(egui::Align2::RIGHT_TOP, [-5.0,5.0]).show(ctx, |ui| {
-            ui.label(format!("Probability of Bust: {:.1}%", self.bjp.prob_bust));
-            ui.label(format!("Probability of Immediate Blackjack: {:.1}%", self.bjp.prob_next_blackjack));
-            ui.label(format!("Probability of Dealer Winning: {:.1}%", self.bjp.prob_dealer_wins));
-            ui.label(format!("Probability of Tie: {:.1}%", self.bjp.prob_tie));
-            ui.label(format!("Probability of Player Win: {:.1}%", self.bjp.prob_player_win));
+            ui.label(format!("Probability of Bust: {:.6}%", self.bjp.prob_bust));
+            ui.label(format!("Probability of Immediate Blackjack: {:.6}%", self.bjp.prob_next_blackjack));
+            ui.label(format!("Probability of Dealer Winning: {:.6}%", self.bjp.prob_dealer_wins));
+            ui.label(format!("Probability of Tie: {:.6}%", self.bjp.prob_tie));
+            ui.label(format!("Probability of Player Win: {:.6}%", self.bjp.prob_player_win));
         });
     }
     fn show_card_selection_ui(&mut self, ui: &mut egui::Ui) {
@@ -210,7 +254,7 @@ impl BlackjackAid {
                 self.bjp.prob_tie = t * 100.0;
                 let player = 1.0 - w - t;
                 self.bjp.prob_player_win = player * 100.0;
-                self.bjp.prob_bust = probability_busting(self.player1_hand_total) * 100.0;
+                self.bjp.prob_bust = probability_busting(self.player1_hand_total, &self.cards_remaining) * 100.0;
             }
         }
     }
@@ -270,14 +314,6 @@ fn display_card(
                 ui.add(egui::Image::new(tex).fit_to_exact_size(egui::vec2(80.0,110.0)));
             });
     }
-}
-
-fn probability_busting(curr_hand: i32) -> f64 {
-    let bust = 21 - curr_hand;
-    let rem = BlackjackAid::default().cards_remaining;
-    let mut sum = 0;
-    for i in (bust+1)..rem.len() as i32 { sum += rem[i as usize]; }
-    sum as f64 / rem.iter().sum::<i32>() as f64
 }
 
 fn main() {
