@@ -1,11 +1,15 @@
-use eframe::egui::{
-    self, Color32, ColorImage, Context, FontId, Pos2, TextureHandle, TextureOptions,
+use egui::{
+    self, Align2, Color32, ColorImage, Context, FontId, Pos2, RichText, TextureHandle,
+    TextureOptions, Window,
 };
+
+use eframe::{egui::FontData, egui::FontDefinitions, egui::FontFamily};
 use eframe::{run_native, App, Frame, NativeOptions};
 use egui::ComboBox;
 use egui::Vec2;
 use egui::ViewportBuilder;
 use rand::Rng;
+use std::collections::BTreeMap;
 use std::collections::HashMap;
 
 struct FallingSymbol {
@@ -15,6 +19,9 @@ struct FallingSymbol {
     color: Color32,
 }
 
+//on start menu make button for go to simulator or go to helper
+//return buttons
+
 fn load_texture(ctx: &egui::Context, path: &str) -> Option<TextureHandle> {
     let image_data = std::fs::read(path).ok()?;
     let image = image::load_from_memory(&image_data).ok()?.to_rgba8();
@@ -22,6 +29,24 @@ fn load_texture(ctx: &egui::Context, path: &str) -> Option<TextureHandle> {
     let pixels = image.into_raw();
     let color_image = ColorImage::from_rgba_unmultiplied(size, &pixels);
     Some(ctx.load_texture(path, color_image, TextureOptions::LINEAR))
+}
+
+fn setup_custom_fonts(ctx: &egui::Context) {
+    let jackbot_font = FontData::from_static(include_bytes!("../resources/KarmaFuture.ttf"));
+
+    // Create a font definitions object
+    let mut fonts = FontDefinitions::default();
+
+    fonts.font_data.insert("Block BRK".to_owned(), jackbot_font);
+
+    // Tell egui to use "jackbot" for this font family name
+    fonts.families.insert(
+        FontFamily::Name("jackbot".into()),
+        vec!["jackbot".to_owned()],
+    );
+
+    // Apply the font definitions to the context
+    ctx.set_fonts(fonts);
 }
 
 fn hand_total(input: Vec<String>) -> i32 {
@@ -152,6 +177,10 @@ struct BlackjackAid {
     bjp: BlackjackProbabilities,
     frame_count: usize,
     falling_symbols: Vec<FallingSymbol>,
+    secret_pop: bool,
+    initialized: bool,
+    forbidden_cards_sim: Vec<(i32, i32)>, //stores the cards pulled in the blackjack simulator
+                                          // stats: SimulatorStats,
 }
 
 impl Default for BlackjackAid {
@@ -180,6 +209,8 @@ impl Default for BlackjackAid {
             .collect();
 
         Self {
+            initialized: false,
+            secret_pop: false,
             start_screen: true,
             falling_symbols,
             frame_count: 0,
@@ -207,69 +238,132 @@ impl Default for BlackjackAid {
             number_of_decks,
             cards_remaining: vec![4 * number_of_decks; 13],
             bjp: BlackjackProbabilities::default(),
+            forbidden_cards_sim: Vec::new(),
+            // stats: SimulatorStats::default(),
         }
     }
 }
 
 impl App for BlackjackAid {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut Frame) {
+    fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
+        // Setup fonts and initialization
+        if !self.initialized {
+            let mut fonts = FontDefinitions::default();
 
-        //setting up beginning game screen
+            fonts.font_data.insert(
+                "block_brk".to_owned(),
+                FontData::from_owned(include_bytes!("../resources/KarmaFuture.ttf").to_vec()),
+            );
+
+            fonts
+                .families
+                .entry(FontFamily::Proportional)
+                .or_default()
+                .insert(0, "block_brk".to_owned());
+
+            fonts
+                .families
+                .entry(FontFamily::Monospace)
+                .or_default()
+                .insert(0, "block_brk".to_owned());
+
+            ctx.set_fonts(fonts);
+            self.initialized = true;
+        }
+
+        let screen_rect = ctx.screen_rect();
+
         if self.start_screen {
             egui::CentralPanel::default().show(ctx, |ui| {
+                ui.add_space(screen_rect.height() * 0.2);
                 ui.vertical_centered(|ui| {
-                    ui.heading("hi");
-                    ui.label("Press enter");
+                    ui.heading("JACK-BOT");
+
+                    ui.add_space(30.0);
+
+                    ui.label(
+                        egui::RichText::new("Need some help? We got you!")
+                            .size(24.0)
+                            .color(egui::Color32::LIGHT_GRAY),
+                    );
+
+                    ui.add_space(50.0);
+
+                    if ui
+                        .add(
+                            egui::Button::new(
+                                egui::RichText::new("Play a Round").color(egui::Color32::WHITE),
+                            )
+                            .min_size(egui::Vec2::new(200.0, 40.0))
+                            .fill(egui::Color32::from_rgb(30, 80, 30))
+                            .rounding(10.0),
+                        )
+                        .clicked()
+                    {
+                        // Play logic here
+                    }
+
+                    ui.add_space(10.0);
+
+                    if ui
+                        .add(
+                            egui::Button::new(
+                                egui::RichText::new("Get Some Help").color(egui::Color32::WHITE),
+                            )
+                            .min_size(egui::Vec2::new(200.0, 40.0))
+                            .fill(egui::Color32::from_rgb(60, 60, 100))
+                            .rounding(10.0),
+                        )
+                        .clicked()
+                    {
+                        self.start_screen = false;
+                    }
                 });
             });
 
-            if ctx.input(|i| i.key_pressed(egui::Key::Enter)) {
-                self.start_screen = false;
-            }
-
-            //once pressed loops into main visuals 
+            ctx.request_repaint();
         } else {
-            // Set custom dark visuals
+            // Dark theme setup
             ctx.set_visuals(egui::Visuals {
                 window_fill: egui::Color32::from_rgb(10, 80, 10),
                 ..egui::Visuals::dark()
-
-
             });
 
-            {
-                let screen_rect = ctx.screen_rect();
-                let painter = ctx.layer_painter(egui::LayerId::background());
+            let painter = ctx.layer_painter(egui::LayerId::background());
 
-                painter.rect_filled(screen_rect, 0.0, egui::Color32::from_rgb(41,55,59));
+            painter.rect_filled(screen_rect, 0.0, egui::Color32::from_rgb(41, 55, 59));
 
-                for symbol in &mut self.falling_symbols {
-                    symbol.pos.y += symbol.velocity;
-                    if symbol.pos.y > screen_rect.bottom() {
-                        symbol.pos.y = 0.0;
-                        symbol.pos.x = rand::thread_rng().gen_range(0.0..screen_rect.right());
-                    }
-
-                    painter.text(
-                        symbol.pos,
-                        egui::Align2::CENTER_CENTER,
-                        symbol.symbol,
-                        egui::FontId::proportional(24.0),
-                        symbol.color,
-                    );
+            for symbol in &mut self.falling_symbols {
+                symbol.pos.y += symbol.velocity;
+                if symbol.pos.y > screen_rect.bottom() {
+                    symbol.pos.y = 0.0;
+                    symbol.pos.x = rand::thread_rng().gen_range(0.0..screen_rect.right());
                 }
+
+                painter.text(
+                    symbol.pos,
+                    egui::Align2::CENTER_CENTER,
+                    symbol.symbol,
+                    egui::FontId::proportional(24.0),
+                    symbol.color,
+                );
             }
 
-            // UI on top of the background
-            egui::TopBottomPanel::top("top_controls").show(ctx, |ui| {
-                ui.horizontal(|ui| {
-                    ui.label(
-                        egui::RichText::new("Blackjack Assistant")
-                            .heading()
-                            .color(egui::Color32::GOLD),
-                    );
+            egui::Area::new("button".into())
+                .anchor(Align2::RIGHT_BOTTOM, [-10.0, -10.0])
+                .show(ctx, |ui| {
+                    if ui.button(RichText::new("♥").size(24.0)).clicked() {
+                        self.secret_pop = !self.secret_pop;
+                    }
                 });
-            });
+
+            if self.secret_pop {
+                Window::new("secret")
+                    .resizable(false)
+                    .collapsible(false)
+                    .anchor(Align2::RIGHT_BOTTOM, [-100.0, -100.0])
+                    .show(ctx, |ui| ui.label("secret plan"));
+            }
 
             egui::Window::new("Controls")
                 .anchor(egui::Align2::LEFT_TOP, [15.0, 20.0])
@@ -283,13 +377,28 @@ impl App for BlackjackAid {
 
             self.show_probabilities_window(ctx);
 
-            // Repaint for animation
             ctx.request_repaint();
         }
     }
 }
 
 impl BlackjackAid {
+    fn setup_custom_fonts(ctx: &egui::Context) {
+        let jackbot_font = FontData::from_static(include_bytes!("../resources/KarmaFuture.ttf"));
+
+        let mut fonts = FontDefinitions::default();
+
+        // Add your custom font data
+        fonts.font_data.insert("jackbot".to_owned(), jackbot_font);
+
+        // Use it for the Proportional family (or Name-based)
+        fonts.families.insert(
+            FontFamily::Name("jackbot".into()),
+            vec!["jackbot".to_owned()],
+        );
+
+        ctx.set_fonts(fonts);
+    }
     fn show_probabilities_window(&self, ctx: &egui::Context) {
         egui::Window::new("Probabilities")
             .anchor(egui::Align2::RIGHT_TOP, [-5.0, 5.0])
@@ -482,6 +591,29 @@ impl BlackjackAid {
         });
         self.dealer_hand_total = hand_total(self.recorded_cards_dealer.clone());
         ui.label(format!("Hand Total = {}", self.dealer_hand_total));
+    }
+
+    fn show_title_banner(&mut self, ctx: &egui::Context) {
+        // UI on top of the background
+        egui::TopBottomPanel::top("top_controls").show(ctx, |ui| {
+            ui.add_space(10.0);
+
+            ui.group(|ui| {
+                ui.vertical(|ui| {
+                    ui.with_layout(
+                        egui::Layout::top_down_justified(egui::Align::Center),
+                        |ui| {
+                            ui.heading(
+                                egui::RichText::new("🃏 Blackjack Assistant")
+                                    .size(32.0)
+                                    .strong(),
+                            );
+                        },
+                    );
+                });
+            });
+            ui.add_space(10.0);
+        });
     }
 }
 
