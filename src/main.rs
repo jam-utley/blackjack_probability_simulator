@@ -83,6 +83,118 @@ fn hand_total(input: Vec<String>) -> i32 {
     return hand_value;
 }
 
+
+
+/// Probability next-card gives you a blackjack (21) from your current total.
+/// Probability next-card gives you a blackjack (21) from your current total.
+//Args
+//'player total' - 'total sum of cards on current hand 
+//'card_remaining' - 'an array of size 13 with each index of the remaining cards for that value
+fn probability_next_blackjack(player_total: i32, cards_remaining: &Vec<i32>) -> f64 {
+    let total_cards: i32 = cards_remaining.iter().sum();
+    if total_cards == 0 || player_total >= 21 {
+        return 0.0;
+    }
+    let needed = 21 - player_total;
+    let count = match needed {
+        2..=9 => cards_remaining[needed as usize - 2], // 2 maps to idx 0
+        10 => cards_remaining[8] + cards_remaining[9] + cards_remaining[10] + cards_remaining[11],
+        11 | 1 => cards_remaining[12], // Ace
+        _ => 0,
+    };
+
+    count as f64 / total_cards as f64
+}
+
+
+/// computes (win_prob, tie_prob) for dealer given player's total, deck counts, and dealer total.
+/// uses memoization to avoid redundant computation.(dynamic programming)
+//Args
+//player_total - 'total current hand for player'
+//dealer_total - 'total current hand for dealer'
+//cards_remaining - 'card counts which holds how many total cards in the vector remaining'
+//memo - 'hashmap to store player_total, dealer_total, and cards_remaining as keys to avoid recomputing
+fn probability_dealer_outcomes(
+    player_total: i32,
+    dealer_total: i32,
+    cards_remaining: &Vec<i32>,
+    memo: &mut HashMap<(i32, i32, String), (f64, f64)>,
+) -> (f64, f64) {
+    if dealer_total > 21 {
+        return (0.0, 0.0);
+    }
+    let key = (
+        player_total,
+        dealer_total,
+        format!("{:?}", cards_remaining),
+    );
+    if let Some(&cached) = memo.get(&key) {
+        return cached;
+    }
+    if dealer_total >= 17 {
+        let result = if dealer_total > player_total {
+            (1.0, 0.0)
+        } else if dealer_total == player_total {
+            (0.0, 1.0)
+        } else {
+            (0.0, 0.0)
+        };
+        memo.insert(key, result);
+        return result;
+    }
+    let card_vals = [2, 3, 4, 5, 6, 7, 8, 9, 10, 10, 10, 10, 11];
+    let total_cards: i32 = cards_remaining.iter().sum();
+    let mut win = 0.0;
+    let mut tie = 0.0;
+    for (i, &cnt) in cards_remaining.iter().enumerate() {
+        if cnt == 0 {
+            continue;
+        }
+        let mut next = cards_remaining.clone();
+        next[i] -= 1;
+
+        let draw_val = if card_vals[i] == 11 && dealer_total + 11 > 21 {
+            1
+        } else {
+            card_vals[i]
+        };
+        let prob = cnt as f64 / total_cards as f64;
+        let next_total = dealer_total + draw_val;
+
+        let (w, t) = probability_dealer_outcomes(player_total, next_total, &next, memo);
+        win += prob * w;
+        tie += prob * t;
+    }
+    memo.insert(key, (win, tie));
+    (win, tie)
+}
+
+fn probability_busting(curr_hand: i32, card_counts: &Vec<i32>) -> f64 {
+    let card_vals = [2, 3, 4, 5, 6, 7, 8, 9, 10, 10, 10, 10, 11];
+    let total_remaining: i32 = card_counts.iter().sum();
+
+    if total_remaining == 0 {
+        return 0.0;
+    }
+    let mut bust_prob = 0.0;
+
+    for (i, &count) in card_counts.iter().enumerate() {
+        if count == 0 {
+            continue;
+        }
+        let mut val = card_vals[i];
+        if val == 11 && curr_hand + 11 > 21 {
+            val = 1;
+        }
+        if curr_hand + val > 21 {
+            bust_prob += count as f64 / total_remaining as f64;
+        }
+    }
+
+    bust_prob
+}
+
+
 struct StringToInt {
     ace_low: i32,
     two: i32,
@@ -478,7 +590,7 @@ impl App for BlackjackAid {
                                 rand_suit_index,
                                 rand_card_index,
                                 out_of_cards,
-                            ) = player_turn(self.forbidden_cards_sim.clone());
+                            ) =  player_turn(&self.forbidden_cards_sim.clone(), &self.card_number, &self.suit);
                             if out_of_cards == true {
                                 self.stats.out_of_cards = true;
                             } else {
@@ -486,13 +598,14 @@ impl App for BlackjackAid {
                                     .push((rand_suit_index, rand_card_index));
                                 self.player1_card_ids.push(card_id.clone());
                                 self.recorded_cards_player1.push(card_value);
+                                self.cards_remaining[rand_card_index as usize] -= 1;;
                                 self.player1_hand_total =
                                     hand_total(self.recorded_cards_player1.clone());
                             }
                         }
                         //initialize dealer cards
                         let (card_id, card_value, rand_suit_index, rand_card_index, out_of_cards) =
-                            player_turn(self.forbidden_cards_sim.clone());
+                             player_turn(&self.forbidden_cards_sim.clone(), &self.card_number, &self.suit);
                         if out_of_cards == true {
                             self.stats.out_of_cards = true;
                         } else {
@@ -501,6 +614,7 @@ impl App for BlackjackAid {
                             //println!("{:?}", self.forbidden_cards_sim);
                             self.dealer_card_ids.push(card_id.clone());
                             self.recorded_cards_dealer.push(card_value);
+                            self.cards_remaining[rand_card_index as usize] =- 1;
                             self.dealer_hand_total = hand_total(self.recorded_cards_dealer.clone());
                         }
                     }
@@ -523,13 +637,14 @@ impl App for BlackjackAid {
                                 rand_suit_index,
                                 rand_card_index,
                                 out_of_cards,
-                            ) = player_turn(self.forbidden_cards_sim.clone());
+                            ) =  player_turn(&self.forbidden_cards_sim.clone(), &self.card_number, &self.suit);
                             if out_of_cards == true {
                                 ui.label("Out of cards!");
                             } else {
                                 self.forbidden_cards_sim
                                     .push((rand_suit_index, rand_card_index));
                                 //println!("{:?}", self.forbidden_cards_sim);
+
                                 self.player1_card_ids.push(card_id.clone());
                                 self.recorded_cards_player1.push(card_value);
                                 self.player1_hand_total =
@@ -538,7 +653,7 @@ impl App for BlackjackAid {
                         }
                         //initialize dealer cards
                         let (card_id, card_value, rand_suit_index, rand_card_index, out_of_cards) =
-                            player_turn(self.forbidden_cards_sim.clone());
+                            player_turn(&self.forbidden_cards_sim.clone(), &self.card_number, &self.suit);
                         if out_of_cards == true {
                             self.stats.out_of_cards = true;
                         } else {
@@ -546,6 +661,7 @@ impl App for BlackjackAid {
                                 .push((rand_suit_index, rand_card_index));
                             //println!("{:?}", self.forbidden_cards_sim);
                             self.dealer_card_ids.push(card_id.clone());
+                            self.cards_remaining[rand_card_index as usize] -= 1;
                             self.recorded_cards_dealer.push(card_value);
                             self.dealer_hand_total = hand_total(self.recorded_cards_dealer.clone());
                         }
@@ -615,7 +731,7 @@ impl App for BlackjackAid {
                                 rand_suit_index,
                                 rand_card_index,
                                 out_of_cards,
-                            ) = player_turn(self.forbidden_cards_sim.clone());
+                            ) =  player_turn(&self.forbidden_cards_sim.clone(), &self.card_number, &self.suit);
                             if out_of_cards == true {
                                 self.stats.out_of_cards = true;
                             } else {
@@ -664,7 +780,7 @@ impl App for BlackjackAid {
                                     rand_suit_index,
                                     rand_card_index,
                                     out_of_cards,
-                                ) = player_turn(self.forbidden_cards_sim.clone());
+                                ) =  player_turn(&self.forbidden_cards_sim.clone(), &self.card_number, &self.suit);
                                 if out_of_cards == true {
                                     self.stats.out_of_cards = true;
                                     break;
@@ -673,6 +789,7 @@ impl App for BlackjackAid {
                                         .push((rand_suit_index, rand_card_index));
                                     println!("{:?}", self.forbidden_cards_sim);
                                     self.dealer_card_ids.push(card_id.clone());
+                                    self.cards_remaining[rand_card_index as usize] -= 1;
                                     self.recorded_cards_dealer.push(card_value);
                                     self.dealer_hand_total =
                                         hand_total(self.recorded_cards_dealer.clone());
@@ -716,7 +833,7 @@ impl App for BlackjackAid {
                                 rand_suit_index,
                                 rand_card_index,
                                 out_of_cards,
-                            ) = player_turn(self.forbidden_cards_sim.clone());
+                            ) =  player_turn(&self.forbidden_cards_sim.clone(), &self.card_number, &self.suit);
                             if out_of_cards == true {
                                 self.stats.out_of_cards = true;
                             } else {
@@ -731,7 +848,7 @@ impl App for BlackjackAid {
                         }
                         //initialize dealer cards
                         let (card_id, card_value, rand_suit_index, rand_card_index, out_of_cards) =
-                            player_turn(self.forbidden_cards_sim.clone());
+                             player_turn(&self.forbidden_cards_sim.clone(), &self.card_number, &self.suit);
                         if out_of_cards == true {
                             self.stats.out_of_cards = true;
                         } else {
@@ -739,6 +856,7 @@ impl App for BlackjackAid {
                                 .push((rand_suit_index, rand_card_index));
                             //println!("{:?}", self.forbidden_cards_sim);
                             self.dealer_card_ids.push(card_id.clone());
+                            self.cards_remaining[rand_card_index as usize] -= 1;
                             self.recorded_cards_dealer.push(card_value);
                             self.dealer_hand_total = hand_total(self.recorded_cards_dealer.clone());
                         }
@@ -766,7 +884,7 @@ impl App for BlackjackAid {
                                 rand_suit_index,
                                 rand_card_index,
                                 out_of_cards,
-                            ) = player_turn(self.forbidden_cards_sim.clone());
+                            ) =  player_turn(&self.forbidden_cards_sim.clone(), &self.card_number, &self.suit);
                             if out_of_cards == true {
                                 self.stats.out_of_cards = true;
                             } else {
@@ -781,7 +899,7 @@ impl App for BlackjackAid {
                         }
                         //initialize dealer cards
                         let (card_id, card_value, rand_suit_index, rand_card_index, out_of_cards) =
-                            player_turn(self.forbidden_cards_sim.clone());
+                            player_turn(&self.forbidden_cards_sim.clone(), &self.card_number, &self.suit);
                         if out_of_cards == true {
                             self.stats.out_of_cards = true;
                         } else {
@@ -789,6 +907,7 @@ impl App for BlackjackAid {
                                 .push((rand_suit_index, rand_card_index));
                             //println!("{:?}", self.forbidden_cards_sim);
                             self.dealer_card_ids.push(card_id.clone());
+                            self.cards_remaining[rand_card_index as usize] -= 1;
                             self.recorded_cards_dealer.push(card_value);
                             self.dealer_hand_total = hand_total(self.recorded_cards_dealer.clone());
                         }
@@ -816,7 +935,7 @@ impl App for BlackjackAid {
                                 rand_suit_index,
                                 rand_card_index,
                                 out_of_cards,
-                            ) = player_turn(self.forbidden_cards_sim.clone());
+                            ) =  player_turn(&self.forbidden_cards_sim.clone(), &self.card_number, &self.suit);
                             if out_of_cards == true {
                                 self.stats.out_of_cards = true;
                             } else {
@@ -825,13 +944,14 @@ impl App for BlackjackAid {
                                 //println!("{:?}", self.forbidden_cards_sim);
                                 self.player1_card_ids.push(card_id.clone());
                                 self.recorded_cards_player1.push(card_value);
+                                self.cards_remaining[rand_card_index as usize] -= 1;
                                 self.player1_hand_total =
                                     hand_total(self.recorded_cards_player1.clone());
                             }
                         }
                         //initialize dealer cards
                         let (card_id, card_value, rand_suit_index, rand_card_index, out_of_cards) =
-                            player_turn(self.forbidden_cards_sim.clone());
+                            player_turn(&self.forbidden_cards_sim.clone(), &self.card_number, &self.suit);
                         if out_of_cards == true {
                             self.stats.out_of_cards = true;
                         } else {
@@ -840,6 +960,7 @@ impl App for BlackjackAid {
                             //println!("{:?}", self.forbidden_cards_sim);
                             self.dealer_card_ids.push(card_id.clone());
                             self.recorded_cards_dealer.push(card_value);
+                            self.cards_remaining[rand_card_index as usize] -= 1;
                             self.dealer_hand_total = hand_total(self.recorded_cards_dealer.clone());
                         }
                     }
@@ -865,7 +986,7 @@ impl App for BlackjackAid {
                                 rand_suit_index,
                                 rand_card_index,
                                 out_of_cards,
-                            ) = player_turn(self.forbidden_cards_sim.clone());
+                            ) =  player_turn(&self.forbidden_cards_sim.clone(), &self.card_number, &self.suit);
                             if out_of_cards == true {
                                 self.stats.out_of_cards = true;
                             } else {
@@ -873,6 +994,7 @@ impl App for BlackjackAid {
                                     .push((rand_suit_index, rand_card_index));
                                 //println!("{:?}", self.forbidden_cards_sim);
                                 self.player1_card_ids.push(card_id.clone());
+                                self.cards_remaining[rand_card_index as usize] -= 1;
                                 self.recorded_cards_player1.push(card_value);
                                 self.player1_hand_total =
                                     hand_total(self.recorded_cards_player1.clone());
@@ -880,7 +1002,7 @@ impl App for BlackjackAid {
                         }
                         //initialize dealer cards
                         let (card_id, card_value, rand_suit_index, rand_card_index, out_of_cards) =
-                            player_turn(self.forbidden_cards_sim.clone());
+                            player_turn(&self.forbidden_cards_sim.clone(), &self.card_number, &self.suit);
                         if out_of_cards == true {
                             self.stats.out_of_cards = true;
                         } else {
@@ -889,6 +1011,7 @@ impl App for BlackjackAid {
                             //println!("{:?}", self.forbidden_cards_sim);
                             self.dealer_card_ids.push(card_id.clone());
                             self.recorded_cards_dealer.push(card_value);
+                            self.cards_remaining[rand_card_index as usize] -= 1;
                             self.dealer_hand_total = hand_total(self.recorded_cards_dealer.clone());
                         }
                     }
@@ -915,13 +1038,14 @@ impl App for BlackjackAid {
                                 rand_suit_index,
                                 rand_card_index,
                                 out_of_cards,
-                            ) = player_turn(self.forbidden_cards_sim.clone());
+                            ) =  player_turn(&self.forbidden_cards_sim.clone(), &self.card_number, &self.suit);
                             if out_of_cards == true {
                                 self.stats.out_of_cards = true;
                             } else {
                                 self.forbidden_cards_sim
                                     .push((rand_suit_index, rand_card_index));
                                 //println!("{:?}", self.forbidden_cards_sim);
+                                self.cards_remaining[rand_card_index as usize] -= 1;
                                 self.player1_card_ids.push(card_id.clone());
                                 self.recorded_cards_player1.push(card_value);
                                 self.player1_hand_total =
@@ -930,13 +1054,14 @@ impl App for BlackjackAid {
                         }
                         //initialize dealer cards
                         let (card_id, card_value, rand_suit_index, rand_card_index, out_of_cards) =
-                            player_turn(self.forbidden_cards_sim.clone());
+                             player_turn(&self.forbidden_cards_sim.clone(), &self.card_number, &self.suit);
                         if out_of_cards == true {
                             self.stats.out_of_cards = true;
                         } else {
                             self.forbidden_cards_sim
                                 .push((rand_suit_index, rand_card_index));
                             //println!("{:?}", self.forbidden_cards_sim);
+                            self.cards_remaining[rand_card_index as usize] -= 1;
                             self.dealer_card_ids.push(card_id.clone());
                             self.recorded_cards_dealer.push(card_value);
                             self.dealer_hand_total = hand_total(self.recorded_cards_dealer.clone());
@@ -965,13 +1090,13 @@ impl App for BlackjackAid {
                                 rand_suit_index,
                                 rand_card_index,
                                 out_of_cards,
-                            ) = player_turn(self.forbidden_cards_sim.clone());
+                            ) =  player_turn(&self.forbidden_cards_sim.clone(), &self.card_number, &self.suit);
                             if out_of_cards == true {
                                 self.stats.out_of_cards = true;
                             } else {
                                 self.forbidden_cards_sim
                                     .push((rand_suit_index, rand_card_index));
-                                //println!("{:?}", self.forbidden_cards_sim);
+                                self.cards_remaining[rand_card_index as usize] -= 1;
                                 self.player1_card_ids.push(card_id.clone());
                                 self.recorded_cards_player1.push(card_value);
                                 self.player1_hand_total =
@@ -980,7 +1105,7 @@ impl App for BlackjackAid {
                         }
                         //initialize dealer cards
                         let (card_id, card_value, rand_suit_index, rand_card_index, out_of_cards) =
-                            player_turn(self.forbidden_cards_sim.clone());
+                            player_turn(&self.forbidden_cards_sim.clone(), &self.card_number, &self.suit);
                         if out_of_cards == true {
                             self.stats.out_of_cards = true;
                         } else {
@@ -1018,10 +1143,11 @@ impl App for BlackjackAid {
                                 rand_suit_index,
                                 rand_card_index,
                                 out_of_cards,
-                            ) = player_turn(self.forbidden_cards_sim.clone());
+                            ) =  player_turn(&self.forbidden_cards_sim.clone(), &self.card_number, &self.suit);
                             self.forbidden_cards_sim
                                 .push((rand_suit_index, rand_card_index));
                             //println!("{:?}", self.forbidden_cards_sim);
+                            self.cards_remaining[rand_card_index as usize] -= 1;
                             self.player1_card_ids.push(card_id.clone());
                             self.recorded_cards_player1.push(card_value);
                             self.player1_hand_total =
@@ -1029,9 +1155,10 @@ impl App for BlackjackAid {
                         }
                         //initialize dealer cards
                         let (card_id, card_value, rand_suit_index, rand_card_index, out_of_cards) =
-                            player_turn(self.forbidden_cards_sim.clone());
+                           player_turn(&self.forbidden_cards_sim.clone(), &self.card_number, &self.suit);
                         self.forbidden_cards_sim
                             .push((rand_suit_index, rand_card_index));
+                        self.cards_remaining[rand_card_index as usize] -= 1;
                         //println!("{:?}", self.forbidden_cards_sim);
                         self.dealer_card_ids.push(card_id.clone());
                         self.recorded_cards_dealer.push(card_value);
@@ -1135,73 +1262,23 @@ impl BlackjackAid {
 
             if self.recorded_cards_dealer.len() >= 1 && self.recorded_cards_player1.len() >= 2 {
                 println!("Computing probabilities!");
-                self.bjp.prob_dealer_wins = self.probability_dealer_win(
-                    self.player1_hand_total,
-                    &self.cards_remaining,
-                    self.dealer_hand_total,
-                ) * 100.0;
-
-                self.bjp.prob_win_by_stand = (1.0 - (self.bjp.prob_dealer_wins / 100.0)) * 100.0;
-                self.bjp.prob_bust = self.probability_busting(self.player1_hand_total) * 100.0;
+                 let remaining: Vec<i32> = self.cards_remaining.clone();
+                           let mut memo = HashMap::new(); //for memoization
+                    let (w, t) = probability_dealer_outcomes(
+                        self.player1_hand_total,
+                        self.dealer_hand_total,
+                        &remaining,
+                        &mut memo,
+                    );
+                    self.bjp.prob_next_blackjack =  probability_next_blackjack(self.player1_hand_total, &remaining) * 100.0;
+                    self.bjp.prob_win_by_stand = (1.0 - w - t) * 100.0;
+                    self.bjp.prob_bust = probability_busting(self.player1_hand_total, &remaining) * 100.0;
+                    self.bjp.prob_dealer_wins = w * 100.0;
+                    self.bjp.prob_tie = t * 100.0;
             }
         }
     }
-    fn probability_busting(&self, curr_hand: i32) -> f64 {
-        let bust_number = 21 - curr_hand;
-        let mut bust_cards_sum = 0;
 
-        for i in (bust_number + 1)..(self.cards_remaining.len() as i32) {
-            bust_cards_sum += self.cards_remaining[i as usize];
-        }
-
-        let cards_remaining_in_deck: i32 = self.cards_remaining.iter().sum();
-
-        bust_cards_sum as f64 / cards_remaining_in_deck as f64
-    }
-
-    fn probability_dealer_win(
-        &self,
-        curr_hand: i32,
-        card_counts: &Vec<i32>,
-        curr_dealer_hand: i32,
-    ) -> f64 {
-        let card_vals = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 10, 10, 10, 11];
-
-        if curr_dealer_hand > 21 {
-            return 0.0;
-        }
-        if curr_dealer_hand >= 17 && curr_dealer_hand <= 21 {
-            return if curr_dealer_hand > curr_hand {
-                1.0
-            } else {
-                0.0
-            };
-        }
-
-        let total_remaining_deck: i32 = card_counts.iter().sum();
-        let mut win_prob: f64 = 0.0;
-
-        for (i, &count) in card_counts.iter().enumerate() {
-            if count == 0 || i >= card_vals.len() {
-                continue;
-            }
-
-            let draw = card_vals[i];
-            let mut next_total_hand = curr_dealer_hand + draw;
-            if draw == 11 && next_total_hand > 21 {
-                next_total_hand -= 10;
-            }
-
-            let mut next_card_counts = card_counts.clone();
-            next_card_counts[i] -= 1;
-
-            let prob = count as f64 / total_remaining_deck as f64;
-            win_prob +=
-                prob * self.probability_dealer_win(curr_hand, &next_card_counts, next_total_hand);
-        }
-
-        win_prob
-    }
 
     fn show_reset_buttons(&mut self, ui: &mut egui::Ui) {
         ui.separator();
@@ -1278,14 +1355,16 @@ impl BlackjackAid {
     }
 }
 
-fn player_turn(forbidden_cards_sim: Vec<(i32, i32)>) -> (String, String, i32, i32, bool) {
-    //pick random card_number
-    //pick random suit
-    //if suit and card_number match up with one already picked, then pick again
+fn player_turn(
+    forbidden_cards_sim: &Vec<(i32, i32)>,
+    card_number: &Vec<String>,
+    suit: &Vec<String>,
+) -> (String, String, i32, i32, bool) {
     let mut rand_card_index = rand::random_range(0..13);
     let mut rand_suit_index = rand::random_range(0..4);
     let mut counter = 0;
-    let mut out_of_cards: bool = false;
+    let mut out_of_cards = false;
+
     while forbidden_cards_sim.contains(&(rand_suit_index, rand_card_index)) {
         rand_card_index = rand::random_range(0..13);
         rand_suit_index = rand::random_range(0..4);
@@ -1295,36 +1374,30 @@ fn player_turn(forbidden_cards_sim: Vec<(i32, i32)>) -> (String, String, i32, i3
             break;
         }
     }
-    if out_of_cards == true {
-        let card_value = "-1".to_string();
-        let card_suit = "None".to_string();
-        let card_id = format!("{}_of_{}", card_value, card_suit);
-        return (
-            card_id,
-            card_value,
-            rand_suit_index,
-            rand_card_index,
-            out_of_cards,
-        );
-    } else {
-        println!("{:?}", forbidden_cards_sim);
-        let card_value =
-            BlackjackAid::default().card_number[rand_card_index as usize].to_lowercase();
-        let card_suit = BlackjackAid::default().suit[rand_suit_index as usize].to_lowercase();
-        let card_id = format!("{}_of_{}", card_value, card_suit);
-        println!("{}", card_id);
 
-        //BlackjackAid::default().player1_card_ids.push(card_id.clone());
-        //println!("{:?}", BlackjackAid::default().player1_card_ids);
+    if out_of_cards {
         return (
-            card_id,
-            card_value,
+            "none_of_none".to_string(),
+            "-1".to_string(),
             rand_suit_index,
             rand_card_index,
-            out_of_cards,
+            true,
         );
     }
+
+    let card_value = card_number[rand_card_index as usize].to_lowercase();
+    let card_suit = suit[rand_suit_index as usize].to_lowercase();
+    let card_id = format!("{}_of_{}", card_value, card_suit);
+
+    (
+        card_id,
+        card_value,
+        rand_suit_index,
+        rand_card_index,
+        false,
+    )
 }
+
 
 fn display_card(
     ui: &mut egui::Ui,
@@ -1355,102 +1428,6 @@ fn display_card(
     }
 }
 
-fn probability_busting(curr_hand: i32, card_counts: &Vec<i32>) -> f64 {
-    let card_vals = [2, 3, 4, 5, 6, 7, 8, 9, 10, 10, 10, 10, 11];
-    let total_remaining: i32 = card_counts.iter().sum();
-
-    if total_remaining == 0 {
-        return 0.0;
-    }
-    let mut bust_prob = 0.0;
-
-    for (&val, &count) in card_vals.iter().zip(card_counts.iter()) {  //(2, 4), (3, 4), (4,4), (card value, #of cards for that value)
-        if count == 0 {
-            continue;
-        }
-        let draw = if val == 11 && curr_hand + 11 > 21 { 1 } else { val };
-
-        if curr_hand + draw > 21 {
-            bust_prob += count as f64 / total_remaining as f64;
-        }
-    }
-
-    return(bust_prob);
-}
-
-fn probability_dealer_outcomes(
-    player_total: i32,
-    dealer_total: i32,
-    cards_remaining: &Vec<i32>,
-    memo: &mut HashMap<(i32, i32, String), (f64, f64)>,
-) -> (f64, f64) {
-    if dealer_total > 21 {
-        return (0.0, 0.0);
-    }
-
-    let key = (
-        player_total,
-        dealer_total,
-        format!("{:?}", cards_remaining), // use vec as string for key
-    );
-
-    if let Some(&cached) = memo.get(&key) {
-        return cached;
-    }
-
-    if dealer_total >= 17 {
-        let result = if dealer_total > player_total {
-            (1.0, 0.0)
-        } else if dealer_total == player_total {
-            (0.0, 1.0)
-        } else {
-            (0.0, 0.0)
-        };
-        memo.insert(key, result);
-        return result;
-    }
-
-    let card_vals = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 10, 10, 10, 11];
-    let total_cards: i32 = cards_remaining.iter().sum();
-    let mut win = 0.0;
-    let mut tie = 0.0;
-
-    for (i, &cnt) in cards_remaining.iter().enumerate() {
-        if cnt == 0 {
-            continue;
-        }
-
-        let mut next = cards_remaining.clone();
-        next[i] -= 1;
-        let prob = cnt as f64 / total_cards as f64;
-        let next_total = dealer_total + card_vals[i];
-
-        let (w, t) = probability_dealer_outcomes(player_total, next_total, &next, memo);
-        win += prob * w;
-        tie += prob * t;
-    }
-    memo.insert(key, (win, tie));
-    (win, tie)
-}
-
-fn probability_next_blackjack(player_total: i32, cards_remaining: &Vec<i32>) -> f64 {
-    let total_cards: i32 = cards_remaining.iter().sum();
-    if total_cards == 0 || player_total >= 21 {
-        return 0.0;
-    }
-
-    let needed = 21 - player_total;
-
-    let count = match needed {
-        1 => cards_remaining[0], // ace low (1)
-        2..=9 => cards_remaining[needed as usize - 1],
-        10 => cards_remaining[9] + cards_remaining[10] + cards_remaining[11] + cards_remaining[12],
-        11 => cards_remaining[13], // ace high (11)
-        _ => 0,
-    };
-
-    count as f64 / total_cards as f64
-}
 
 fn main() {
     let options = NativeOptions {
