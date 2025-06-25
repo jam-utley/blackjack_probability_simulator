@@ -51,6 +51,7 @@ fn setup_custom_fonts(ctx: &egui::Context) {
 }
 
 fn hand_total(input: Vec<String>) -> i32 {
+    //calculates the hand total of a player/dealer given the string of the number they drew/chose
     let mut output = Vec::new();
     let mut hand_value: i32 = 0;
     let mut ace_in_hand: bool = false;
@@ -71,6 +72,7 @@ fn hand_total(input: Vec<String>) -> i32 {
     for j in output {
         hand_value += j;
     }
+    //Handles the conversion from a high ace to a low ace in the event of busting
     if ace_in_hand {
         'ace_conversion: for _k in 1..=number_of_aces {
             if hand_value > 21 {
@@ -213,6 +215,7 @@ struct StringToInt {
 }
 
 impl StringToInt {
+    //converts between a card name and a value
     fn new() -> Self {
         Self {
             ace_low: 1,
@@ -253,6 +256,7 @@ impl StringToInt {
 }
 
 struct BlackjackProbabilities {
+    //stores the probabilities of different outcomes
     prob_bust: f64,
     prob_next_blackjack: f64,
     prob_win_by_stand: f64,
@@ -273,6 +277,7 @@ impl Default for BlackjackProbabilities {
 }
 
 struct SimulatorStats {
+    //Bool vals control the simulator's popups
     player_wins: bool,
     dealer_wins: bool,
     player_bust: bool,
@@ -297,6 +302,7 @@ impl Default for SimulatorStats {
 }
 
 struct BlackjackAid {
+    //All the variables and values used in the game
     start_screen: bool,
     game_sim: bool,
     card_counter: bool,
@@ -325,7 +331,9 @@ struct BlackjackAid {
 }
 
 impl Default for BlackjackAid {
+    //initializes the default state for the struct BlackjackAid
     fn default() -> Self {
+        //Initializes the 
         let number_of_decks = 1;
         let mut rng = rand::thread_rng();
         let symbols = vec!['♠', '♥', '♦', '♣'];
@@ -557,19 +565,7 @@ impl App for BlackjackAid {
             });
 
         egui::SidePanel::left("my_left_panel").show(ctx, |ui| {
-            /*ui.label(format!("Probability of Bust: {:.2}%", self.bjp.prob_bust));
-            ui.label(format!(
-                "Probability of Immediate Blackjack: {:.1}%",
-                self.bjp.prob_next_blackjack
-            ));
-            ui.label(format!(
-                "Probability of Winning by Standing: {:}%",
-                self.bjp.prob_win_by_stand
-            ));
-            ui.label(format!(
-                "Probability of Dealer Wins if You Stand: {:.1}%",
-                self.bjp.prob_dealer_wins
-            ));*/
+            //Side panel for border only
         });
 
         egui::SidePanel::right("my_right_panel").show(ctx, |ui| {
@@ -616,6 +612,9 @@ impl App for BlackjackAid {
                             self.recorded_cards_dealer.push(card_value);
                             self.cards_remaining[rand_card_index as usize] =- 1;
                             self.dealer_hand_total = hand_total(self.recorded_cards_dealer.clone());
+                        }
+                        if self.player1_hand_total == 21 {
+                            self.stats.natural_blackjack = true;
                         }
                     }
                     if ui.button("New Game").clicked() {
@@ -664,6 +663,9 @@ impl App for BlackjackAid {
                             self.cards_remaining[rand_card_index as usize] -= 1;
                             self.recorded_cards_dealer.push(card_value);
                             self.dealer_hand_total = hand_total(self.recorded_cards_dealer.clone());
+                        }
+                        if self.player1_hand_total == 21 {
+                            self.stats.natural_blackjack = true;
                         }
                     }
                 });
@@ -737,7 +739,7 @@ impl App for BlackjackAid {
                             } else {
                                 self.forbidden_cards_sim
                                     .push((rand_suit_index, rand_card_index));
-                                println!("{:?}", self.forbidden_cards_sim);
+                                //println!("{:?}", self.forbidden_cards_sim);
                                 self.player1_card_ids.push(card_id.clone());
                                 self.recorded_cards_player1.push(card_value);
                                 self.player1_hand_total =
@@ -751,15 +753,18 @@ impl App for BlackjackAid {
                         &remaining,
                         &mut memo,
                     );
-                    self.bjp.prob_next_blackjack =  probability_next_blackjack(self.player1_hand_total, &remaining) * 100.0;
+                    self.bjp.prob_next_blackjack =  probability_next_blackjack(self.player1_hand_total, &remaining);
                     self.bjp.prob_win_by_stand = (1.0 - w - t) * 100.0;
                     self.bjp.prob_bust = probability_busting(self.player1_hand_total, &remaining) * 100.0;
                     self.bjp.prob_dealer_wins = w * 100.0;
                     self.bjp.prob_tie = t * 100.0;
                             if self.player1_hand_total > 21 {
                                 self.stats.player_bust = true;
-                                println!("Bustin Time!");
-                                println!("{}", self.stats.player_bust);
+                                //println!("Bustin Time!");
+                                //println!("{}", self.stats.player_bust);
+                            }
+                            if self.player1_hand_total == 21 {
+                                self.stats.natural_blackjack = true;
                             }
                         }
                     });
@@ -787,7 +792,7 @@ impl App for BlackjackAid {
                                 } else {
                                     self.forbidden_cards_sim
                                         .push((rand_suit_index, rand_card_index));
-                                    println!("{:?}", self.forbidden_cards_sim);
+                                    //println!("{:?}", self.forbidden_cards_sim);
                                     self.dealer_card_ids.push(card_id.clone());
                                     self.cards_remaining[rand_card_index as usize] -= 1;
                                     self.recorded_cards_dealer.push(card_value);
@@ -1070,7 +1075,7 @@ impl App for BlackjackAid {
                 });
         }
         if self.stats.natural_blackjack {
-            egui::Window::new("You win! Natural Blackjack!")
+            egui::Window::new("You win! Blackjack!")
                 .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
                 .open(&mut self.stats.natural_blackjack)
                 .show(ctx, |ui| {
@@ -1275,6 +1280,7 @@ impl BlackjackAid {
                     self.bjp.prob_bust = probability_busting(self.player1_hand_total, &remaining) * 100.0;
                     self.bjp.prob_dealer_wins = w * 100.0;
                     self.bjp.prob_tie = t * 100.0;
+                //println!("Computing probabilities!");
             }
         }
     }
@@ -1376,27 +1382,30 @@ fn player_turn(
     }
 
     if out_of_cards {
+        let card_value = "-1".to_string();
+        let card_suit = "None".to_string();
+        let card_id = format!("{}_of_{}", card_value, card_suit);
         return (
-            "none_of_none".to_string(),
-            "-1".to_string(),
+            card_id,
+            card_value,
             rand_suit_index,
             rand_card_index,
-            true,
+            out_of_cards,
+        );
+    } else {
+        let card_value = card_number[rand_card_index as usize].to_lowercase();
+        let card_suit = suit[rand_suit_index as usize].to_lowercase();
+        let card_id = format!("{}_of_{}", card_value, card_suit);
+        return (
+            card_id,
+            card_value,
+            rand_suit_index,
+            rand_card_index,
+            false,
         );
     }
-
-    let card_value = card_number[rand_card_index as usize].to_lowercase();
-    let card_suit = suit[rand_suit_index as usize].to_lowercase();
-    let card_id = format!("{}_of_{}", card_value, card_suit);
-
-    (
-        card_id,
-        card_value,
-        rand_suit_index,
-        rand_card_index,
-        false,
-    )
 }
+
 
 
 fn display_card(
