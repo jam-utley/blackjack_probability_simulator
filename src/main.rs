@@ -58,25 +58,48 @@ fn hand_total(input: Vec<String>) -> i32 {
     return hand_value;
 }
 
+/// Probability next-card gives you a blackjack (21) from your current total.
+/// Probability next-card gives you a blackjack (21) from your current total.
 fn probability_next_blackjack(player_total: i32, cards_remaining: &Vec<i32>) -> f64 {
     let total_cards: i32 = cards_remaining.iter().sum();
-    if total_cards == 0 { return 0.0; }
+    if total_cards == 0 {
+        return 0.0;
+    }
 
-    let prob = match player_total {
+    // How much you need to hit exactly 21:
+    let needed = 21 - player_total;
+    if needed < 1 || needed > 11 {
+        return 0.0;
+    }
+
+    // Count how many cards of that value remain:
+    let count = match needed {
+        1 => {
+            // low ace (value = 1)
+            cards_remaining[0]
+        }
+        2..=9 => {
+            // numeric cards 2–9 map to indices 1–8
+            cards_remaining[(needed - 1) as usize]
+        }
         10 => {
-            // need an ace
-            cards_remaining[12] as f64 / total_cards as f64
+            // any ten-value: "10" at 9, J at 10, Q at 11, K at 12
+            cards_remaining[9]
+            + cards_remaining[10]
+            + cards_remaining[11]
+            + cards_remaining[12]
         }
         11 => {
-            // need a ten-value card: 10, Jack, Queen, King
-            let tens = cards_remaining[8] + cards_remaining[9] + cards_remaining[10] + cards_remaining[11];
-            tens as f64 / total_cards as f64
+            // high ace (value = 11)
+            cards_remaining[13]
         }
-        _ => 0.0,
+        _ => 0,
     };
 
-    return prob;
+    count as f64 / total_cards as f64
 }
+
+
 
 
 
@@ -97,7 +120,7 @@ fn probability_busting(
         }
         let mut draw: i32 = val;
         if draw == 11 && curr_hand + val > 21{
-            draw=1    //decrement by 10 for 1 for low ace 
+            draw=1    //set to low ace 
         }
         if curr_hand + draw > 21{
             bust += card_counts[i] as f64 / total_remaining_deck as f64;
@@ -107,7 +130,7 @@ fn probability_busting(
 
 }
 
-
+/// Computes (win_prob, tie_prob) for dealer given player's total, deck counts, and dealer total.
 fn probability_dealer_outcomes(
     player_total: i32,
     cards_remaining: &Vec<i32>,
@@ -119,7 +142,7 @@ fn probability_dealer_outcomes(
                else if dealer_total == player_total { (0.0, 1.0) }
                else                  { (0.0, 0.0) };
     }
-    let card_vals = vec![2,3,4,5,6,7,8,9,10,10,10,10,11];
+    let card_vals = vec![1,2,3,4,5,6,7,8,9,10,10,10,10,11];
     let total_cards: i32 = cards_remaining.iter().sum();
     let mut win = 0.0;
     let mut tie = 0.0;
@@ -135,7 +158,6 @@ fn probability_dealer_outcomes(
     }
     (win, tie)
 }
-
 
 
 
@@ -211,7 +233,7 @@ impl Default for BlackjackProbabilities {
             prob_next_blackjack: 0.0,
             prob_win_by_stand: 0.0,
             prob_dealer_wins: 0.0,
-            prob_tie: 0.0
+            prob_tie: 0.0,
         }
     }
 }
@@ -368,17 +390,12 @@ impl App for BlackjackAid {
                     let remaining = self.cards_remaining.clone();
                     println!("Computing probabilities!");
                     let (w, t) = probability_dealer_outcomes(self.player1_hand_total, &remaining, self.dealer_hand_total);
-                self.bjp.prob_dealer_wins = w * 100.0;
-                self.bjp.prob_tie = t * 100.0;
-                    self.bjp.prob_next_blackjack =  probability_blackjack(self.number_of_decks, &remaining) * 100.0;
-                    self.bjp.prob_win_by_stand  = 100.0 - self.bjp.prob_dealer_wins;
+                    self.bjp.prob_next_blackjack =  probability_next_blackjack(self.player1_hand_total, &remaining) * 100.0;
+                    self.bjp.prob_win_by_stand = (1.0 - w - t) * 100.0;
                     self.bjp.prob_bust = probability_busting(self.player1_hand_total, &remaining) * 100.0;
-                    dbg!(
-                        &self.recorded_cards_player1,
-                        &self.recorded_cards_dealer,
-                        self.player1_hand_total,
-                        self.dealer_hand_total,
-                        &self.cards_remaining);
+                    self.bjp.prob_dealer_wins = w * 100.0;
+                    self.bjp.prob_tie = t * 100.0;
+
                 }
                 }
                 
