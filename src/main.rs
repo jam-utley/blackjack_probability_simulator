@@ -1,20 +1,27 @@
-use eframe::egui::{self, ColorImage, ComboBox, TextureHandle, TextureOptions};
-use eframe::{App, NativeOptions, run_native};
+use eframe::egui::{
+    self, Color32, ColorImage, Context, FontId, Pos2, TextureHandle, TextureOptions,
+};
+use eframe::{run_native, App, Frame, NativeOptions};
+use egui::ComboBox;
+use egui::Vec2;
+use egui::ViewportBuilder;
+use rand::Rng;
 use std::collections::HashMap;
-use std::path::Path;
 
-//things to do:
-//finish card counting function
-//add New Round button
-//incorporate probability functions
+struct FallingSymbol {
+    pos: Pos2,
+    velocity: f32,
+    symbol: char,
+    color: Color32,
+}
 
 fn load_texture(ctx: &egui::Context, path: &str) -> Option<TextureHandle> {
-    println!("Loading image: {}", path);
-    let img = image::open(Path::new(path)).ok()?;
-    let size = [img.width() as usize, img.height() as usize];
-    let rgba = img.to_rgba8().into_raw();
-    let color_img = ColorImage::from_rgba_unmultiplied(size, &rgba);
-    Some(ctx.load_texture(path, color_img, TextureOptions::default()))
+    let image_data = std::fs::read(path).ok()?;
+    let image = image::load_from_memory(&image_data).ok()?.to_rgba8();
+    let size = [image.width() as usize, image.height() as usize];
+    let pixels = image.into_raw();
+    let color_image = ColorImage::from_rgba_unmultiplied(size, &pixels);
+    Some(ctx.load_texture(path, color_image, TextureOptions::LINEAR))
 }
 
 fn hand_total(input: Vec<String>) -> i32 {
@@ -48,71 +55,6 @@ fn hand_total(input: Vec<String>) -> i32 {
         }
     }
     return hand_value;
-}
-
-//Args
-// `val`: value of the card
-//'curr_hand' - total current hand
-//'card_Val' - vector of card values with faces and numbers
-//'card_counts' - 'card counts which holds how many total cards in the vector remaining
-
-fn probability_busting(curr_hand: i32) -> f64 {
-    let bust_number = 21 - curr_hand;
-    let mut bust_cards_sum = 0; //sums the total of the cards remaining that could bust the hand on the next draw
-    for i in (bust_number + 1)..(BlackjackAid::default().cards_remaining.len() as i32) {
-        bust_cards_sum += BlackjackAid::default().cards_remaining[i as usize];
-    }
-    let mut cards_remaining_in_deck = 0;
-    for i in BlackjackAid::default().cards_remaining {
-        cards_remaining_in_deck += i;
-    }
-
-    let prob_bust: f64 = bust_cards_sum as f64 / cards_remaining_in_deck as f64;
-    println!("{prob_bust}");
-    return prob_bust;
-}
-
-fn probability_dealer_win(curr_hand: i32, card_counts: &Vec<i32>, curr_dealer_hand: i32) -> f64 {
-    //replace card_vals with calls to the struct
-
-    let card_vals = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 10, 10, 10, 11]; //values of the cards
-
-    //check if dealer busts if current dealer hand
-    if curr_dealer_hand > 21 {
-        //println!("{:?}",curr_dealer_hand);
-        return 0.0;
-    }
-    //check if dealer stand if current dealer <=17 and less than or equal to 21
-    if curr_dealer_hand >= 17 && curr_dealer_hand <= 21 {
-        if curr_dealer_hand > curr_hand {
-            //check if current dealer hand is greater than players hand then return 1.0 for the weight probability
-            //println!("Dealer wins with {} vs {}", curr_dealer_hand, curr_hand);
-            return 1.0;
-        } else {
-            //println!("Dealer stands with {} — not enough to beat {}", curr_dealer_hand, curr_hand);
-            return 0.0; //else return 0.0
-        }
-    }
-
-    //This variable tracks the sum total of all of the remaining cards?
-    let total_remaining_deck: i32 = card_counts.iter().sum(); //sum all remaining decks
-    //println!("{total_remaining_deck}");
-    let cards_remaining = BlackjackAid::default().cards_remaining.clone();
-    let mut win_prob: f64 = 0.0;
-    for (i, &val) in cards_remaining.iter().enumerate() {
-        //loop through each remaining card if exists in card_count vector deck
-        if cards_remaining[i] == 0 {
-            continue;
-        }
-        let mut next_card_count: Vec<i32> = cards_remaining.clone(); //create clone to prevent mutate globally
-        next_card_count[i] -= 1;
-        let mut curr_prob: f64 = cards_remaining[i] as f64 / total_remaining_deck as f64; //calculate current probability
-        let mut next_total_hand: i32 = card_vals[i] + curr_dealer_hand; //sum the total value of the next dealer hand
-        win_prob +=
-            curr_prob * probability_dealer_win(curr_hand, &next_card_count, next_total_hand);
-    }
-    //win_prob *= 100.0;
-    return win_prob;
 }
 
 struct StringToInt {
@@ -191,6 +133,8 @@ impl Default for BlackjackProbabilities {
 }
 
 struct BlackjackAid {
+    start_screen: bool,
+    textures: HashMap<String, TextureHandle>,
     player: Vec<String>, //Picks between player and the dealer
     selected_player: String,
     selected_suit: String,
@@ -206,13 +150,40 @@ struct BlackjackAid {
     number_of_decks: i32,
     cards_remaining: Vec<i32>,
     bjp: BlackjackProbabilities,
-    textures: HashMap<String, TextureHandle>,
+    frame_count: usize,
+    falling_symbols: Vec<FallingSymbol>,
 }
 
 impl Default for BlackjackAid {
     fn default() -> Self {
         let number_of_decks = 1;
+        let mut rng = rand::thread_rng();
+        let symbols = vec!['♠', '♥', '♦', '♣'];
+        let colors = vec![
+            Color32::BLACK,
+            Color32::from_rgb(220, 20, 60), // red hearts
+            Color32::from_rgb(220, 20, 60), // red diamonds
+            Color32::BLACK,
+        ];
+
+        let mut rng = rand::thread_rng();
+        let falling_symbols = (0..30)
+            .map(|_| {
+                let idx = rng.gen_range(0..symbols.len());
+                FallingSymbol {
+                    pos: Pos2::new(rng.gen_range(0.0..800.0), rng.gen_range(0.0..600.0)),
+                    velocity: rng.gen_range(1.0..3.5),
+                    symbol: symbols[idx],
+                    color: colors[idx],
+                }
+            })
+            .collect();
+
         Self {
+            start_screen: true,
+            falling_symbols,
+            frame_count: 0,
+            textures: HashMap::new(),
             player: vec!["Dealer".into(), "Player 1".into()],
             selected_player: "Please choose a player".into(),
             selected_suit: "Please select a suit".into(),
@@ -236,36 +207,82 @@ impl Default for BlackjackAid {
             number_of_decks,
             cards_remaining: vec![4 * number_of_decks; 13],
             bjp: BlackjackProbabilities::default(),
-            textures: HashMap::new(),
         }
     }
 }
 
-impl eframe::App for BlackjackAid {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        let visuals = egui::Visuals {
-            //sets background color for dropown menus and windows, not the entire page
-            window_fill: egui::Color32::from_rgb(10, 10, 40),
-            ..egui::Visuals::dark()
-        };
-        ctx.set_visuals(visuals);
-        
-        self.show_probabilities_window(ctx);
+impl App for BlackjackAid {
+    fn update(&mut self, ctx: &egui::Context, _frame: &mut Frame) {
 
-        egui::CentralPanel::default()
-            .frame(egui::Frame::default().fill(egui::Color32::from_rgb(40, 110, 31)))
-            .show(ctx, |ui| {
-                self.show_card_selection_ui(ui);
-                self.show_reset_buttons(ui);
-                self.show_card_display_sections(ui, ctx);
+        //setting up beginning game screen
+        if self.start_screen {
+            egui::CentralPanel::default().show(ctx, |ui| {
+                ui.vertical_centered(|ui| {
+                    ui.heading("hi");
+                    ui.label("Press enter");
+                });
             });
+
+            if ctx.input(|i| i.key_pressed(egui::Key::Enter)) {
+                self.start_screen = false;
+            }
+
+            //once pressed loops into main visuals 
+        } else {
+            // Set custom dark visuals
+            ctx.set_visuals(egui::Visuals {
+                window_fill: egui::Color32::from_rgb(10, 80, 10),
+                ..egui::Visuals::dark()
+
+            });
+        }
+
+            {
+                let screen_rect = ctx.screen_rect();
+                let painter = ctx.layer_painter(egui::LayerId::background());
+
+                painter.rect_filled(screen_rect, 0.0, egui::Color32::from_rgb(41,55,59));
+
+                for symbol in &mut self.falling_symbols {
+                    symbol.pos.y += symbol.velocity;
+                    if symbol.pos.y > screen_rect.bottom() {
+                        symbol.pos.y = 0.0;
+                        symbol.pos.x = rand::thread_rng().gen_range(0.0..screen_rect.right());
+                    }
+
+                    painter.text(
+                        symbol.pos,
+                        egui::Align2::CENTER_CENTER,
+                        symbol.symbol,
+                        egui::FontId::proportional(24.0),
+                        symbol.color,
+                    );
+                }
+            }   
+
+            egui::Window::new("Controls")
+                .anchor(egui::Align2::LEFT_TOP, [15.0, 80.0])
+                .resizable(false)
+                .collapsible(true)
+                .show(ctx, |ui| {
+                    self.show_card_selection_ui(ui);
+                    self.show_reset_buttons(ui);
+                    self.show_card_display_sections(ui, ctx);
+                });
+
+            self.show_probabilities_window(ctx);
+            self.show_title_banner(ctx);
+
+            // Repaint for animation
+            ctx.request_repaint();
+        
     }
 }
 
-impl BlackjackAid{
+impl BlackjackAid {
     fn show_probabilities_window(&self, ctx: &egui::Context) {
         egui::Window::new("Probabilities")
-            .anchor(egui::Align2::RIGHT_TOP, [-5.0, 5.0])
+            .anchor(egui::Align2::RIGHT_TOP, [-15.0, 80.0])
             .show(ctx, |ui| {
                 ui.label(format!("Probability of Bust: {:.2}%", self.bjp.prob_bust));
                 ui.label(format!(
@@ -323,11 +340,13 @@ impl BlackjackAid{
 
                 match self.selected_player.as_str() {
                     "Dealer" => {
-                        self.recorded_cards_dealer.push(self.selected_number.clone());
+                        self.recorded_cards_dealer
+                            .push(self.selected_number.clone());
                         self.dealer_card_ids.push(card_id);
                     }
                     "Player 1" => {
-                        self.recorded_cards_player1.push(self.selected_number.clone());
+                        self.recorded_cards_player1
+                            .push(self.selected_number.clone());
                         self.player1_card_ids.push(card_id);
                     }
                     _ => {}
@@ -336,17 +355,73 @@ impl BlackjackAid{
 
             if self.recorded_cards_dealer.len() >= 1 && self.recorded_cards_player1.len() >= 2 {
                 println!("Computing probabilities!");
-                self.bjp.prob_dealer_wins = (probability_dealer_win(
+                self.bjp.prob_dealer_wins = self.probability_dealer_win(
                     self.player1_hand_total,
                     &self.cards_remaining,
                     self.dealer_hand_total,
-                )) * 100.0;
+                ) * 100.0;
 
-                self.bjp.prob_win_by_stand =
-                    (1.0 - ((self.bjp.prob_dealer_wins) / 100.0)) * 100.0;
-                self.bjp.prob_bust = (probability_busting(self.player1_hand_total)) * 100.0;
+                self.bjp.prob_win_by_stand = (1.0 - (self.bjp.prob_dealer_wins / 100.0)) * 100.0;
+                self.bjp.prob_bust = self.probability_busting(self.player1_hand_total) * 100.0;
             }
         }
+    }
+
+    fn probability_busting(&self, curr_hand: i32) -> f64 {
+        let bust_number = 21 - curr_hand;
+        let mut bust_cards_sum = 0;
+
+        for i in (bust_number + 1)..(self.cards_remaining.len() as i32) {
+            bust_cards_sum += self.cards_remaining[i as usize];
+        }
+
+        let cards_remaining_in_deck: i32 = self.cards_remaining.iter().sum();
+
+        bust_cards_sum as f64 / cards_remaining_in_deck as f64
+    }
+
+    fn probability_dealer_win(
+        &self,
+        curr_hand: i32,
+        card_counts: &Vec<i32>,
+        curr_dealer_hand: i32,
+    ) -> f64 {
+        let card_vals = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 10, 10, 10, 11];
+
+        if curr_dealer_hand > 21 {
+            return 0.0;
+        }
+        if curr_dealer_hand >= 17 && curr_dealer_hand <= 21 {
+            return if curr_dealer_hand > curr_hand {
+                1.0
+            } else {
+                0.0
+            };
+        }
+
+        let total_remaining_deck: i32 = card_counts.iter().sum();
+        let mut win_prob: f64 = 0.0;
+
+        for (i, &count) in card_counts.iter().enumerate() {
+            if count == 0 || i >= card_vals.len() {
+                continue;
+            }
+
+            let draw = card_vals[i];
+            let mut next_total_hand = curr_dealer_hand + draw;
+            if draw == 11 && next_total_hand > 21 {
+                next_total_hand -= 10;
+            }
+
+            let mut next_card_counts = card_counts.clone();
+            next_card_counts[i] -= 1;
+
+            let prob = count as f64 / total_remaining_deck as f64;
+            win_prob +=
+                prob * self.probability_dealer_win(curr_hand, &next_card_counts, next_total_hand);
+        }
+
+        win_prob
     }
 
     fn show_reset_buttons(&mut self, ui: &mut egui::Ui) {
@@ -399,6 +474,26 @@ impl BlackjackAid{
         self.dealer_hand_total = hand_total(self.recorded_cards_dealer.clone());
         ui.label(format!("Hand Total = {}", self.dealer_hand_total));
     }
+
+    fn show_title_banner(&mut self, ctx: &egui::Context) {
+    // UI on top of the background
+        egui::TopBottomPanel::top("top_controls").show(ctx, |ui| {
+            ui.add_space(10.0);
+
+            ui.group(|ui| {
+            ui.vertical(|ui| {
+                ui.with_layout(egui::Layout::top_down_justified(egui::Align::Center), |ui| {
+                    ui.heading(
+                        egui::RichText::new("🃏 Blackjack Assistant")
+                            .size(32.0)
+                            .strong()
+                    );
+                });
+            });
+            });
+            ui.add_space(10.0);
+            });    
+    }
 }
 
 fn display_card(
@@ -419,10 +514,10 @@ fn display_card(
     }
 
     if let Some(tex) = textures.get(&path) {
-        let mut frame = egui::Frame::default()
+        let frame = egui::Frame::default()
             .fill(egui::Color32::WHITE)
-            .inner_margin(egui::Margin::same(1.0))
-            .rounding(egui::Rounding::same(5.0))
+            .inner_margin(egui::Margin::same(1))
+            .rounding(egui::Rounding::same(5))
             .stroke(egui::Stroke::new(1.0, egui::Color32::BLACK));
         frame.show(ui, |ui| {
             ui.add(egui::Image::new(tex).fit_to_exact_size(egui::vec2(80.0, 110.0)));
@@ -431,10 +526,16 @@ fn display_card(
 }
 
 fn main() {
-    let options = NativeOptions::default();
+    let options = NativeOptions {
+        viewport: ViewportBuilder::default()
+            .with_inner_size([800.0, 600.0])
+            .with_resizable(true),
+        ..Default::default()
+    };
+
     run_native(
         "Blackjack Assistant",
         options,
-        Box::new(|_cc| Box::new(BlackjackAid::default())),
+        Box::new(|_cc| Ok(Box::new(BlackjackAid::default()))),
     );
 }
