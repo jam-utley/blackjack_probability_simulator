@@ -499,6 +499,9 @@ impl App for BlackjackAid {
                             self.recorded_cards_dealer.push(card_value);
                             self.dealer_hand_total = hand_total(self.recorded_cards_dealer.clone());
                         }
+                        if self.player1_hand_total == 21 {
+                            self.stats.natural_blackjack = true;
+                        }
                     }
                     if ui.button("New Game").clicked() {
                         //RESETS CARD COUNTING
@@ -544,6 +547,9 @@ impl App for BlackjackAid {
                             self.dealer_card_ids.push(card_id.clone());
                             self.recorded_cards_dealer.push(card_value);
                             self.dealer_hand_total = hand_total(self.recorded_cards_dealer.clone());
+                        }
+                        if self.player1_hand_total == 21 {
+                            self.stats.natural_blackjack = true;
                         }
                     }
                 });
@@ -944,7 +950,7 @@ impl App for BlackjackAid {
                 });
         }
         if self.stats.natural_blackjack {
-            egui::Window::new("You win! Natural Blackjack!")
+            egui::Window::new("You win! Blackjack!")
                 .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
                 .open(&mut self.stats.natural_blackjack)
                 .show(ctx, |ui| {
