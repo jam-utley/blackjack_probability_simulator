@@ -60,39 +60,22 @@ fn hand_total(input: Vec<String>) -> i32 {
 
 /// Probability next-card gives you a blackjack (21) from your current total.
 /// Probability next-card gives you a blackjack (21) from your current total.
+//Args
+//'player total' - 'total sum of cards on current hand 
+//'card_remaining' - 'an array of size 13 with each index of the remaining cards for that value
 fn probability_next_blackjack(player_total: i32, cards_remaining: &Vec<i32>) -> f64 {
     let total_cards: i32 = cards_remaining.iter().sum();
-    if total_cards == 0 {
+    if total_cards == 0 || player_total >= 21 {
         return 0.0;
     }
 
-    // How much you need to hit exactly 21:
     let needed = 21 - player_total;
-    if needed < 1 || needed > 11 {
-        return 0.0;
-    }
 
-    // Count how many cards of that value remain:
     let count = match needed {
-        1 => {
-            // low ace (value = 1)
-            cards_remaining[0]
-        }
-        2..=9 => {
-            // numeric cards 2–9 map to indices 1–8
-            cards_remaining[(needed - 1) as usize]
-        }
-        10 => {
-            // any ten-value: "10" at 9, J at 10, Q at 11, K at 12
-            cards_remaining[9]
-            + cards_remaining[10]
-            + cards_remaining[11]
-            + cards_remaining[12]
-        }
-        11 => {
-            // high ace (value = 11)
-            cards_remaining[13]
-        }
+        1 => cards_remaining[0], // ace low (1)
+        2..=9 => cards_remaining[needed as usize - 1],
+        10 => cards_remaining[9] + cards_remaining[10] + cards_remaining[11] + cards_remaining[12],
+        11 => cards_remaining[13], // ace high (11)
         _ => 0,
     };
 
@@ -101,63 +84,95 @@ fn probability_next_blackjack(player_total: i32, cards_remaining: &Vec<i32>) -> 
 
 
 
-
-
 //fn to provide the probability of busting 
 //Args
 //'curr_hand' - total current hand
 //'card_counts' - 'card counts which holds how many total cards in the vector remaining
-fn probability_busting(
-    curr_hand: i32,
-    card_counts: &Vec<i32>,
-) -> f64 {
-    let card_vals = vec![2, 3, 4, 5, 6, 7, 8, 9, 10, 10, 10, 10,11];
-    let mut bust: f64 = 0.0;
-    let total_remaining_deck: i32 = card_counts.iter().sum();
-     for (i, &val) in card_vals.iter().enumerate(){ //loop to get val and its current index 
-        if card_counts[i] == 0{
-            continue
-        }
-        let mut draw: i32 = val;
-        if draw == 11 && curr_hand + val > 21{
-            draw=1    //set to low ace 
-        }
-        if curr_hand + draw > 21{
-            bust += card_counts[i] as f64 / total_remaining_deck as f64;
-        }
-}
-    return bust;
+fn probability_busting(curr_hand: i32, card_counts: &Vec<i32>) -> f64 {
+    let card_vals = [2, 3, 4, 5, 6, 7, 8, 9, 10, 10, 10, 10, 11];
+    let total_remaining: i32 = card_counts.iter().sum();
 
+    if total_remaining == 0 {
+        return 0.0;
+    }
+    let mut bust_prob = 0.0;
+
+    for (&val, &count) in card_vals.iter().zip(card_counts.iter()) {  //(2, 4), (3, 4), (4,4), (card value, #of cards for that value)
+        if count == 0 {
+            continue;
+        }
+        let draw = if val == 11 && curr_hand + 11 > 21 { 1 } else { val };
+
+        if curr_hand + draw > 21 {
+            bust_prob += count as f64 / total_remaining as f64;
+        }
+    }
+
+    bust_prob
 }
 
-/// Computes (win_prob, tie_prob) for dealer given player's total, deck counts, and dealer total.
+/// computes (win_prob, tie_prob) for dealer given player's total, deck counts, and dealer total.
+/// uses memoization to avoid redundant computation.(dynamic programming)
+//Args
+//player_total - 'total current hand for player'
+//dealer_total - 'total current hand for dealer'
+//cards_remaining - 'card counts which holds how many total cards in the vector remaining'
+//memo - 'hashmap to store player_total, dealer_total, and cards_remaining as keys to avoid recomputing
 fn probability_dealer_outcomes(
     player_total: i32,
-    cards_remaining: &Vec<i32>,
     dealer_total: i32,
+    cards_remaining: &Vec<i32>,
+    memo: &mut HashMap<(i32, i32, String), (f64, f64)>,
 ) -> (f64, f64) {
-    if dealer_total > 21 { return (0.0, 0.0); }
-    if dealer_total >= 17 {
-        return if dealer_total > player_total { (1.0, 0.0) }
-               else if dealer_total == player_total { (0.0, 1.0) }
-               else                  { (0.0, 0.0) };
+    if dealer_total > 21 {
+        return (0.0, 0.0);
     }
-    let card_vals = vec![1,2,3,4,5,6,7,8,9,10,10,10,10,11];
+
+    let key = (
+        player_total,
+        dealer_total,
+        format!("{:?}", cards_remaining), // use vec as string for key
+    );
+
+    if let Some(&cached) = memo.get(&key) {
+        return cached;
+    }
+
+    if dealer_total >= 17 {
+        let result = if dealer_total > player_total {
+            (1.0, 0.0)
+        } else if dealer_total == player_total {
+            (0.0, 1.0)
+        } else {
+            (0.0, 0.0)
+        };
+        memo.insert(key, result);
+        return result;
+    }
+
+    let card_vals = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 10, 10, 10, 11];
     let total_cards: i32 = cards_remaining.iter().sum();
     let mut win = 0.0;
     let mut tie = 0.0;
+
     for (i, &cnt) in cards_remaining.iter().enumerate() {
-        if cnt == 0 { continue; }
-        let p = cnt as f64 / total_cards as f64;
+        if cnt == 0 {
+            continue;
+        }
+
         let mut next = cards_remaining.clone();
         next[i] -= 1;
-        let next_tot = dealer_total + card_vals[i];
-        let (w, t) = probability_dealer_outcomes(player_total, &next, next_tot);
-        win += p * w;
-        tie += p * t;
+        let prob = cnt as f64 / total_cards as f64;
+        let next_total = dealer_total + card_vals[i];
+
+        let (w, t) = probability_dealer_outcomes(player_total, next_total, &next, memo);
+        win += prob * w;
+        tie += prob * t;
     }
+    memo.insert(key, (win, tie));
     (win, tie)
 }
+
 
 
 
@@ -389,7 +404,13 @@ impl App for BlackjackAid {
                     self.dealer_hand_total = hand_total(self.recorded_cards_dealer.clone());
                     let remaining = self.cards_remaining.clone();
                     println!("Computing probabilities!");
-                    let (w, t) = probability_dealer_outcomes(self.player1_hand_total, &remaining, self.dealer_hand_total);
+                    let mut memo = HashMap::new(); //for memoization
+                    let (w, t) = probability_dealer_outcomes(
+                        self.player1_hand_total,
+                        self.dealer_hand_total,
+                        &remaining,
+                        &mut memo,
+                    );
                     self.bjp.prob_next_blackjack =  probability_next_blackjack(self.player1_hand_total, &remaining) * 100.0;
                     self.bjp.prob_win_by_stand = (1.0 - w - t) * 100.0;
                     self.bjp.prob_bust = probability_busting(self.player1_hand_total, &remaining) * 100.0;
@@ -418,6 +439,7 @@ impl App for BlackjackAid {
                         self.dealer_card_ids.clear();
                         self.player1_card_ids.clear();
                         self.cards_remaining.clear();
+                        self.bjp = BlackjackProbabilities::default();
                     }
                 });
 
