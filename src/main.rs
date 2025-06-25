@@ -641,6 +641,9 @@ impl App for BlackjackAid {
                                 //println!("Bustin Time!");
                                 //println!("{}", self.stats.player_bust);
                             }
+                            if self.player1_hand_total == 21 {
+                                self.stats.natural_blackjack = true;
+                            }
                         }
                     });
                     columns[1].with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
