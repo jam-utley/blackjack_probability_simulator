@@ -629,7 +629,7 @@ impl App for BlackjackAid {
                             } else {
                                 self.forbidden_cards_sim
                                     .push((rand_suit_index, rand_card_index));
-                                println!("{:?}", self.forbidden_cards_sim);
+                                //println!("{:?}", self.forbidden_cards_sim);
                                 self.player1_card_ids.push(card_id.clone());
                                 self.recorded_cards_player1.push(card_value);
                                 self.player1_hand_total =
@@ -650,8 +650,8 @@ impl App for BlackjackAid {
                     self.bjp.prob_tie = t * 100.0;
                             if self.player1_hand_total > 21 {
                                 self.stats.player_bust = true;
-                                println!("Bustin Time!");
-                                println!("{}", self.stats.player_bust);
+                                //println!("Bustin Time!");
+                                //println!("{}", self.stats.player_bust);
                             }
                         }
                     });
@@ -679,7 +679,7 @@ impl App for BlackjackAid {
                                 } else {
                                     self.forbidden_cards_sim
                                         .push((rand_suit_index, rand_card_index));
-                                    println!("{:?}", self.forbidden_cards_sim);
+                                    //println!("{:?}", self.forbidden_cards_sim);
                                     self.dealer_card_ids.push(card_id.clone());
                                     self.recorded_cards_dealer.push(card_value);
                                     self.dealer_hand_total =
@@ -1142,7 +1142,7 @@ impl BlackjackAid {
             }
 
             if self.recorded_cards_dealer.len() >= 1 && self.recorded_cards_player1.len() >= 2 {
-                println!("Computing probabilities!");
+                //println!("Computing probabilities!");
                 self.bjp.prob_dealer_wins = self.probability_dealer_win(
                     self.player1_hand_total,
                     &self.cards_remaining,
@@ -1315,12 +1315,12 @@ fn player_turn(forbidden_cards_sim: Vec<(i32, i32)>) -> (String, String, i32, i3
             out_of_cards,
         );
     } else {
-        println!("{:?}", forbidden_cards_sim);
+        //println!("{:?}", forbidden_cards_sim);
         let card_value =
             BlackjackAid::default().card_number[rand_card_index as usize].to_lowercase();
         let card_suit = BlackjackAid::default().suit[rand_suit_index as usize].to_lowercase();
         let card_id = format!("{}_of_{}", card_value, card_suit);
-        println!("{}", card_id);
+        //println!("{}", card_id);
 
         //BlackjackAid::default().player1_card_ids.push(card_id.clone());
         //println!("{:?}", BlackjackAid::default().player1_card_ids);
