@@ -51,6 +51,7 @@ fn setup_custom_fonts(ctx: &egui::Context) {
 }
 
 fn hand_total(input: Vec<String>) -> i32 {
+    //calculates the hand total of a player/dealer given the string of the number they drew/chose
     let mut output = Vec::new();
     let mut hand_value: i32 = 0;
     let mut ace_in_hand: bool = false;
@@ -71,6 +72,7 @@ fn hand_total(input: Vec<String>) -> i32 {
     for j in output {
         hand_value += j;
     }
+    //Handles the conversion from a high ace to a low ace in the event of busting
     if ace_in_hand {
         'ace_conversion: for _k in 1..=number_of_aces {
             if hand_value > 21 {
@@ -101,6 +103,7 @@ struct StringToInt {
 }
 
 impl StringToInt {
+    //converts between a card name and a value
     fn new() -> Self {
         Self {
             ace_low: 1,
@@ -141,6 +144,7 @@ impl StringToInt {
 }
 
 struct BlackjackProbabilities {
+    //stores the probabilities of different outcomes
     prob_bust: f64,
     prob_next_blackjack: f64,
     prob_win_by_stand: f64,
@@ -161,6 +165,7 @@ impl Default for BlackjackProbabilities {
 }
 
 struct SimulatorStats {
+    //Bool vals control the simulator's popups
     player_wins: bool,
     dealer_wins: bool,
     player_bust: bool,
@@ -185,6 +190,7 @@ impl Default for SimulatorStats {
 }
 
 struct BlackjackAid {
+    //All the variables and values used in the game
     start_screen: bool,
     game_sim: bool,
     card_counter: bool,
@@ -213,7 +219,9 @@ struct BlackjackAid {
 }
 
 impl Default for BlackjackAid {
+    //initializes the default state for the struct BlackjackAid
     fn default() -> Self {
+        //Initializes the 
         let number_of_decks = 1;
         let mut rng = rand::thread_rng();
         let symbols = vec!['♠', '♥', '♦', '♣'];
