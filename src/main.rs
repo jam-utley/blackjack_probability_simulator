@@ -334,6 +334,24 @@ impl App for BlackjackAid {
                     });
             }
 
+            egui::Area::new("home_button".into())
+                .anchor(Align2::LEFT_BOTTOM, [10.0, -20.0])
+                .show(ctx, |ui| {
+                    Frame::none()
+                        .fill(Color32::from_rgb(41, 55, 59))
+                        .rounding(egui::Rounding::same(5.0))
+                        .show(ui, |ui| {
+                            if ui
+                                .button(RichText::new("Return 🏠").size(15.0).color(Color32::WHITE))
+                                .clicked()
+                            {
+                                self.game_sim = false;
+                                self.card_counter = false;
+                                self.start_screen = true;
+                            }
+                        });
+                });
+
             egui::Window::new("Controls")
                 .anchor(egui::Align2::LEFT_TOP, [15.0, 80.0])
                 .resizable(false)
@@ -358,6 +376,23 @@ impl App for BlackjackAid {
 
             egui::SidePanel::left("my_left_panel").show(ctx, |ui| {
                 //Side panel for border only
+                egui::Area::new("home_button".into())
+                .anchor(Align2::LEFT_BOTTOM, [10.0, -20.0])
+                .show(ctx, |ui| {
+                    Frame::none()
+                        .fill(Color32::from_rgb(41, 55, 59))
+                        .rounding(egui::Rounding::same(5.0))
+                        .show(ui, |ui| {
+                            if ui
+                                .button(RichText::new("Return 🏠").size(15.0).color(Color32::WHITE))
+                                .clicked()
+                            {
+                                self.game_sim = false;
+                                self.card_counter = false;
+                                self.start_screen = true;
+                            }
+                        });
+                });
             });
 
             egui::Window::new("Probabilities")
@@ -536,6 +571,8 @@ impl App for BlackjackAid {
             let button_size = eframe::egui::Vec2::new(200.0, 50.0);
             let button_color = egui::Color32::from_rgb(100, 0, 0);
             let text_color = egui::Color32::from_rgb(176, 176, 176);
+
+
 
             egui::CentralPanel::default()
                 .frame(egui::Frame::default().fill(egui::Color32::from_rgb(40, 110, 31))) //sets page background color
