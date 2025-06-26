@@ -69,6 +69,8 @@ fn hand_total(input: Vec<String>) -> i32 {
     return hand_value;
 }
 
+
+
 struct StringToInt {
     ace_low: i32,
     two: i32,
@@ -1210,74 +1212,23 @@ impl BlackjackAid {
 
             if self.recorded_cards_dealer.len() >= 1 && self.recorded_cards_player1.len() >= 2 {
                 //println!("Computing probabilities!");
-                self.bjp.prob_dealer_wins = self.probability_dealer_win(
-                    self.player1_hand_total,
-                    &self.cards_remaining,
-                    self.dealer_hand_total,
-                ) * 100.0;
-
-                self.bjp.prob_win_by_stand = (1.0 - (self.bjp.prob_dealer_wins / 100.0)) * 100.0;
-                self.bjp.prob_bust = self.probability_busting(self.player1_hand_total) * 100.0;
+                let mut memo = HashMap::new(); //for memoization
+                let remaining = self.cards_remaining.clone();
+                let (w, t) = probability_dealer_outcomes(
+                   self.player1_hand_total,
+                        self.dealer_hand_total,
+                        &remaining,
+                        &mut memo,
+                );
+                self.bjp.prob_dealer_wins = w * (100.0 as f64); 
+                self.bjp.prob_win_by_stand = (1.0 - w - t) * 100.0;
+                self.bjp.prob_bust = probability_busting(self.player1_hand_total, &remaining) * 100.0;
+                self.bjp.prob_next_blackjack = probability_next_blackjack(self.player1_hand_total, &remaining);
+                self.bjp.prob_tie = t * (100.0 as f64);
             }
         }
     }
-    fn probability_busting(&self, curr_hand: i32) -> f64 {
-        let bust_number = 21 - curr_hand;
-        let mut bust_cards_sum = 0;
-
-        for i in (bust_number + 1)..(self.cards_remaining.len() as i32) {
-            bust_cards_sum += self.cards_remaining[i as usize];
-        }
-
-        let cards_remaining_in_deck: i32 = self.cards_remaining.iter().sum();
-
-        bust_cards_sum as f64 / cards_remaining_in_deck as f64
-    }
-
-    fn probability_dealer_win(
-        &self,
-        curr_hand: i32,
-        card_counts: &Vec<i32>,
-        curr_dealer_hand: i32,
-    ) -> f64 {
-        let card_vals = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 10, 10, 10, 11];
-
-        if curr_dealer_hand > 21 {
-            return 0.0;
-        }
-        if curr_dealer_hand >= 17 && curr_dealer_hand <= 21 {
-            return if curr_dealer_hand > curr_hand {
-                1.0
-            } else {
-                0.0
-            };
-        }
-
-        let total_remaining_deck: i32 = card_counts.iter().sum();
-        let mut win_prob: f64 = 0.0;
-
-        for (i, &count) in card_counts.iter().enumerate() {
-            if count == 0 || i >= card_vals.len() {
-                continue;
-            }
-
-            let draw = card_vals[i];
-            let mut next_total_hand = curr_dealer_hand + draw;
-            if draw == 11 && next_total_hand > 21 {
-                next_total_hand -= 10;
-            }
-
-            let mut next_card_counts = card_counts.clone();
-            next_card_counts[i] -= 1;
-
-            let prob = count as f64 / total_remaining_deck as f64;
-            win_prob +=
-                prob * self.probability_dealer_win(curr_hand, &next_card_counts, next_total_hand);
-        }
-
-        win_prob
-    }
-
+  
     fn show_reset_buttons(&mut self, ui: &mut egui::Ui) {
         ui.separator();
         ui.horizontal(|ui| {
