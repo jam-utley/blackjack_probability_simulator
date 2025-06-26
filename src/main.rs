@@ -14,7 +14,7 @@ use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::path::Path;
 
-struct FallingSymbol {
+struct FallingSymbol { //defining struct for raining symbols animation
     pos: Pos2,
     velocity: f32,
     symbol: char,
@@ -33,23 +33,6 @@ fn load_texture(ctx: &egui::Context, path: &str) -> Option<TextureHandle> {
     Some(ctx.load_texture(path, color_image, TextureOptions::LINEAR))
 }
 
-fn setup_custom_fonts(ctx: &egui::Context) {
-    let jackbot_font = FontData::from_static(include_bytes!("../resources/KarmaFuture.ttf"));
-
-    // Create a font definitions object
-    let mut fonts = FontDefinitions::default();
-
-    fonts.font_data.insert("Block BRK".to_owned(), jackbot_font);
-
-    // Tell egui to use "jackbot" for this font family name
-    fonts.families.insert(
-        FontFamily::Name("jackbot".into()),
-        vec!["jackbot".to_owned()],
-    );
-
-    // Apply the font definitions to the context
-    ctx.set_fonts(fonts);
-}
 
 fn hand_total(input: Vec<String>) -> i32 {
     //calculates the hand total of a player/dealer given the string of the number they drew/chose
@@ -1041,7 +1024,10 @@ impl BlackjackAid {
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.add_space(screen_rect.height() * 0.2);
             ui.vertical_centered(|ui| {
-                ui.heading("JACK-BOT");
+                ui.heading(
+                    egui::RichText::new("JACK-BOT")
+                    .size(50.0).color(egui::Color32::RED),
+                    );
 
                 ui.add_space(30.0);
 
