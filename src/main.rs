@@ -360,6 +360,25 @@ impl App for BlackjackAid {
                 //Side panel for border only
             });
 
+            egui::Window::new("Probabilities")
+                .anchor(egui::Align2::RIGHT_BOTTOM, [-5.0, 5.0])
+                .show(ctx, |ui| {
+                    ui.label(format!("Probability of Bust: {:.2}%", self.bjp.prob_bust));
+                    ui.label(format!(
+                        "Probability of Immediate Blackjack: {:.1}%",
+                        self.bjp.prob_next_blackjack
+                    ));
+                    ui.label(format!(
+                        "Probability of Winning by Standing: {:.1}%",
+                        self.bjp.prob_win_by_stand
+                    ));
+                    ui.label(format!(
+                        "Probability of Dealer Wins if You Stand: {:.1}%",
+                        self.bjp.prob_dealer_wins
+                    ));
+                    ui.label(format!("Probability of Tie: {:.1}%", self.bjp.prob_tie));
+                });
+
             egui::SidePanel::right("my_right_panel").show(ctx, |ui| {
                 ui.horizontal_centered(|ui| {
                     ui.vertical(|ui| {
