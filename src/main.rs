@@ -14,7 +14,8 @@ use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::path::Path;
 
-struct FallingSymbol { //defining struct for raining symbols animation
+struct FallingSymbol {
+    //defining struct for raining symbols animation
     pos: Pos2,
     velocity: f32,
     symbol: char,
@@ -32,7 +33,6 @@ fn load_texture(ctx: &egui::Context, path: &str) -> Option<TextureHandle> {
     let color_image = ColorImage::from_rgba_unmultiplied(size, &pixels);
     Some(ctx.load_texture(path, color_image, TextureOptions::LINEAR))
 }
-
 
 fn hand_total(input: Vec<String>) -> i32 {
     //calculates the hand total of a player/dealer given the string of the number they drew/chose
@@ -68,8 +68,6 @@ fn hand_total(input: Vec<String>) -> i32 {
     }
     return hand_value;
 }
-
-
 
 struct StringToInt {
     ace_low: i32,
@@ -379,22 +377,24 @@ impl App for BlackjackAid {
             egui::SidePanel::left("my_left_panel").show(ctx, |ui| {
                 //Side panel for border only
                 egui::Area::new("home_button".into())
-                .anchor(Align2::LEFT_BOTTOM, [10.0, -20.0])
-                .show(ctx, |ui| {
-                    Frame::none()
-                        .fill(Color32::from_rgb(41, 55, 59))
-                        .rounding(egui::Rounding::same(5.0))
-                        .show(ui, |ui| {
-                            if ui
-                                .button(RichText::new("Return 🏠").size(15.0).color(Color32::WHITE))
-                                .clicked()
-                            {
-                                self.game_sim = false;
-                                self.card_counter = false;
-                                self.start_screen = true;
-                            }
-                        });
-                });
+                    .anchor(Align2::LEFT_BOTTOM, [10.0, -20.0])
+                    .show(ctx, |ui| {
+                        Frame::none()
+                            .fill(Color32::from_rgb(41, 55, 59))
+                            .rounding(egui::Rounding::same(5.0))
+                            .show(ui, |ui| {
+                                if ui
+                                    .button(
+                                        RichText::new("Return 🏠").size(15.0).color(Color32::WHITE),
+                                    )
+                                    .clicked()
+                                {
+                                    self.game_sim = false;
+                                    self.card_counter = false;
+                                    self.start_screen = true;
+                                }
+                            });
+                    });
             });
 
             egui::Window::new("Probabilities")
@@ -471,6 +471,23 @@ impl App for BlackjackAid {
                             if self.player1_hand_total == 21 {
                                 self.stats.natural_blackjack = true;
                             }
+                            //calculates probabilities when new round button clicked
+                            let remaining: Vec<i32> = self.cards_remaining.clone();
+                            let mut memo = HashMap::new(); //for memoization
+                            let (w, t) = probability_dealer_outcomes(
+                                self.player1_hand_total,
+                                self.dealer_hand_total,
+                                &remaining,
+                                &mut memo,
+                            );
+                            self.bjp.prob_next_blackjack =
+                                probability_next_blackjack(self.player1_hand_total, &remaining)
+                                    * 100.0;
+                            self.bjp.prob_win_by_stand = (1.0 - w - t) * 100.0;
+                            self.bjp.prob_bust =
+                                probability_busting(self.player1_hand_total, &remaining) * 100.0;
+                            self.bjp.prob_dealer_wins = w * 100.0;
+                            self.bjp.prob_tie = t * 100.0;
                         }
                         if ui.button("New Game").clicked() {
                             //RESETS CARD COUNTING
@@ -528,6 +545,23 @@ impl App for BlackjackAid {
                             if self.player1_hand_total == 21 {
                                 self.stats.natural_blackjack = true;
                             }
+                            //calculates probabilities at game start
+                            let remaining: Vec<i32> = self.cards_remaining.clone();
+                            let mut memo = HashMap::new(); //for memoization
+                            let (w, t) = probability_dealer_outcomes(
+                                self.player1_hand_total,
+                                self.dealer_hand_total,
+                                &remaining,
+                                &mut memo,
+                            );
+                            self.bjp.prob_next_blackjack =
+                                probability_next_blackjack(self.player1_hand_total, &remaining)
+                                    * 100.0;
+                            self.bjp.prob_win_by_stand = (1.0 - w - t) * 100.0;
+                            self.bjp.prob_bust =
+                                probability_busting(self.player1_hand_total, &remaining) * 100.0;
+                            self.bjp.prob_dealer_wins = w * 100.0;
+                            self.bjp.prob_tie = t * 100.0;
                         }
                     });
                 });
@@ -574,8 +608,6 @@ impl App for BlackjackAid {
             let button_color = egui::Color32::from_rgb(100, 0, 0);
             let text_color = egui::Color32::from_rgb(176, 176, 176);
 
-
-
             egui::CentralPanel::default()
                 .frame(egui::Frame::default().fill(egui::Color32::from_rgb(40, 110, 31))) //sets page background color
                 .show(ctx, |ui| {
@@ -602,7 +634,7 @@ impl App for BlackjackAid {
                                 } else {
                                     self.forbidden_cards_sim
                                         .push((rand_suit_index, rand_card_index));
-                                        self.cards_remaining[rand_card_index as usize] -= 1;
+                                    self.cards_remaining[rand_card_index as usize] -= 1;
                                     //println!("{:?}", self.forbidden_cards_sim);
                                     self.player1_card_ids.push(card_id.clone());
                                     self.recorded_cards_player1.push(card_value);
@@ -739,6 +771,26 @@ impl App for BlackjackAid {
                                 self.dealer_hand_total =
                                     hand_total(self.recorded_cards_dealer.clone());
                             }
+                            if SimulatorStats::default().out_of_cards == false {
+                                //calculates probabilities when new round button clicked
+                                let remaining: Vec<i32> = self.cards_remaining.clone();
+                                let mut memo = HashMap::new(); //for memoization
+                                let (w, t) = probability_dealer_outcomes(
+                                    self.player1_hand_total,
+                                    self.dealer_hand_total,
+                                    &remaining,
+                                    &mut memo,
+                                );
+                                self.bjp.prob_next_blackjack =
+                                    probability_next_blackjack(self.player1_hand_total, &remaining)
+                                        * 100.0;
+                                self.bjp.prob_win_by_stand = (1.0 - w - t) * 100.0;
+                                self.bjp.prob_bust =
+                                    probability_busting(self.player1_hand_total, &remaining)
+                                        * 100.0;
+                                self.bjp.prob_dealer_wins = w * 100.0;
+                                self.bjp.prob_tie = t * 100.0;
+                            }
                         }
                     });
             }
@@ -794,6 +846,26 @@ impl App for BlackjackAid {
                                 self.recorded_cards_dealer.push(card_value);
                                 self.dealer_hand_total =
                                     hand_total(self.recorded_cards_dealer.clone());
+                            }
+                            if self.stats.out_of_cards == false {
+                                //calculates probabilities when new round button clicked
+                                let remaining: Vec<i32> = self.cards_remaining.clone();
+                                let mut memo = HashMap::new(); //for memoization
+                                let (w, t) = probability_dealer_outcomes(
+                                    self.player1_hand_total,
+                                    self.dealer_hand_total,
+                                    &remaining,
+                                    &mut memo,
+                                );
+                                self.bjp.prob_next_blackjack =
+                                    probability_next_blackjack(self.player1_hand_total, &remaining)
+                                        * 100.0;
+                                self.bjp.prob_win_by_stand = (1.0 - w - t) * 100.0;
+                                self.bjp.prob_bust =
+                                    probability_busting(self.player1_hand_total, &remaining)
+                                        * 100.0;
+                                self.bjp.prob_dealer_wins = w * 100.0;
+                                self.bjp.prob_tie = t * 100.0;
                             }
                         }
                     });
@@ -851,6 +923,26 @@ impl App for BlackjackAid {
                                 self.dealer_hand_total =
                                     hand_total(self.recorded_cards_dealer.clone());
                             }
+                            if self.stats.out_of_cards == false {
+                                //calculates probabilities when new round button clicked
+                                let remaining: Vec<i32> = self.cards_remaining.clone();
+                                let mut memo = HashMap::new(); //for memoization
+                                let (w, t) = probability_dealer_outcomes(
+                                    self.player1_hand_total,
+                                    self.dealer_hand_total,
+                                    &remaining,
+                                    &mut memo,
+                                );
+                                self.bjp.prob_next_blackjack =
+                                    probability_next_blackjack(self.player1_hand_total, &remaining)
+                                        * 100.0;
+                                self.bjp.prob_win_by_stand = (1.0 - w - t) * 100.0;
+                                self.bjp.prob_bust =
+                                    probability_busting(self.player1_hand_total, &remaining)
+                                        * 100.0;
+                                self.bjp.prob_dealer_wins = w * 100.0;
+                                self.bjp.prob_tie = t * 100.0;
+                            }
                         }
                     });
             }
@@ -886,6 +978,24 @@ impl App for BlackjackAid {
                                     self.player1_hand_total =
                                         hand_total(self.recorded_cards_player1.clone());
                                 }
+                                //calculates probabilities when new round button clicked
+                                let remaining: Vec<i32> = self.cards_remaining.clone();
+                                let mut memo = HashMap::new(); //for memoization
+                                let (w, t) = probability_dealer_outcomes(
+                                    self.player1_hand_total,
+                                    self.dealer_hand_total,
+                                    &remaining,
+                                    &mut memo,
+                                );
+                                self.bjp.prob_next_blackjack =
+                                    probability_next_blackjack(self.player1_hand_total, &remaining)
+                                        * 100.0;
+                                self.bjp.prob_win_by_stand = (1.0 - w - t) * 100.0;
+                                self.bjp.prob_bust =
+                                    probability_busting(self.player1_hand_total, &remaining)
+                                        * 100.0;
+                                self.bjp.prob_dealer_wins = w * 100.0;
+                                self.bjp.prob_tie = t * 100.0;
                             }
                             //initialize dealer cards
                             let (
@@ -905,6 +1015,26 @@ impl App for BlackjackAid {
                                 self.recorded_cards_dealer.push(card_value);
                                 self.dealer_hand_total =
                                     hand_total(self.recorded_cards_dealer.clone());
+                            }
+                            if self.stats.out_of_cards == false {
+                                //calculates probabilities when new round button clicked
+                                let remaining: Vec<i32> = self.cards_remaining.clone();
+                                let mut memo = HashMap::new(); //for memoization
+                                let (w, t) = probability_dealer_outcomes(
+                                    self.player1_hand_total,
+                                    self.dealer_hand_total,
+                                    &remaining,
+                                    &mut memo,
+                                );
+                                self.bjp.prob_next_blackjack =
+                                    probability_next_blackjack(self.player1_hand_total, &remaining)
+                                        * 100.0;
+                                self.bjp.prob_win_by_stand = (1.0 - w - t) * 100.0;
+                                self.bjp.prob_bust =
+                                    probability_busting(self.player1_hand_total, &remaining)
+                                        * 100.0;
+                                self.bjp.prob_dealer_wins = w * 100.0;
+                                self.bjp.prob_tie = t * 100.0;
                             }
                         }
                     });
@@ -962,6 +1092,26 @@ impl App for BlackjackAid {
                                 self.dealer_hand_total =
                                     hand_total(self.recorded_cards_dealer.clone());
                             }
+                            if self.stats.out_of_cards == false {
+                                //calculates probabilities when new round button clicked
+                                let remaining: Vec<i32> = self.cards_remaining.clone();
+                                let mut memo = HashMap::new(); //for memoization
+                                let (w, t) = probability_dealer_outcomes(
+                                    self.player1_hand_total,
+                                    self.dealer_hand_total,
+                                    &remaining,
+                                    &mut memo,
+                                );
+                                self.bjp.prob_next_blackjack =
+                                    probability_next_blackjack(self.player1_hand_total, &remaining)
+                                        * 100.0;
+                                self.bjp.prob_win_by_stand = (1.0 - w - t) * 100.0;
+                                self.bjp.prob_bust =
+                                    probability_busting(self.player1_hand_total, &remaining)
+                                        * 100.0;
+                                self.bjp.prob_dealer_wins = w * 100.0;
+                                self.bjp.prob_tie = t * 100.0;
+                            }
                         }
                     });
             }
@@ -1018,13 +1168,33 @@ impl App for BlackjackAid {
                                 self.dealer_hand_total =
                                     hand_total(self.recorded_cards_dealer.clone());
                             }
+                            if self.stats.out_of_cards == false {
+                                //calculates probabilities when new round button clicked
+                                let remaining: Vec<i32> = self.cards_remaining.clone();
+                                let mut memo = HashMap::new(); //for memoization
+                                let (w, t) = probability_dealer_outcomes(
+                                    self.player1_hand_total,
+                                    self.dealer_hand_total,
+                                    &remaining,
+                                    &mut memo,
+                                );
+                                self.bjp.prob_next_blackjack =
+                                    probability_next_blackjack(self.player1_hand_total, &remaining)
+                                        * 100.0;
+                                self.bjp.prob_win_by_stand = (1.0 - w - t) * 100.0;
+                                self.bjp.prob_bust =
+                                    probability_busting(self.player1_hand_total, &remaining)
+                                        * 100.0;
+                                self.bjp.prob_dealer_wins = w * 100.0;
+                                self.bjp.prob_tie = t * 100.0;
+                            }
                         }
                     });
             }
-            if self.stats.out_of_cards {
+            if SimulatorStats::default().out_of_cards {
                 egui::Window::new("There are no more cards in the deck!")
                     .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
-                    .open(&mut self.stats.out_of_cards)
+                    .open(&mut SimulatorStats::default().out_of_cards)
                     .show(ctx, |ui| {
                         if ui.button("New Game?").clicked() {
                             //println!("{}", MyApp::default().show_popup);
@@ -1069,6 +1239,25 @@ impl App for BlackjackAid {
                             self.recorded_cards_dealer.push(card_value);
                             self.dealer_hand_total = hand_total(self.recorded_cards_dealer.clone());
                         }
+                        if self.stats.out_of_cards == false {
+                            //calculates probabilities when new round button clicked
+                            let remaining: Vec<i32> = self.cards_remaining.clone();
+                            let mut memo = HashMap::new(); //for memoization
+                            let (w, t) = probability_dealer_outcomes(
+                                self.player1_hand_total,
+                                self.dealer_hand_total,
+                                &remaining,
+                                &mut memo,
+                            );
+                            self.bjp.prob_next_blackjack =
+                                probability_next_blackjack(self.player1_hand_total, &remaining)
+                                    * 100.0;
+                            self.bjp.prob_win_by_stand = (1.0 - w - t) * 100.0;
+                            self.bjp.prob_bust =
+                                probability_busting(self.player1_hand_total, &remaining) * 100.0;
+                            self.bjp.prob_dealer_wins = w * 100.0;
+                            self.bjp.prob_tie = t * 100.0;
+                        }
                     });
             }
         }
@@ -1084,8 +1273,9 @@ impl BlackjackAid {
             ui.vertical_centered(|ui| {
                 ui.heading(
                     egui::RichText::new("JACK-BOT")
-                    .size(50.0).color(egui::Color32::RED),
-                    );
+                        .size(50.0)
+                        .color(egui::Color32::RED),
+                );
 
                 ui.add_space(30.0);
 
@@ -1212,23 +1402,74 @@ impl BlackjackAid {
 
             if self.recorded_cards_dealer.len() >= 1 && self.recorded_cards_player1.len() >= 2 {
                 //println!("Computing probabilities!");
-                let mut memo = HashMap::new(); //for memoization
-                let remaining = self.cards_remaining.clone();
-                let (w, t) = probability_dealer_outcomes(
-                   self.player1_hand_total,
-                        self.dealer_hand_total,
-                        &remaining,
-                        &mut memo,
-                );
-                self.bjp.prob_dealer_wins = w * (100.0 as f64); 
-                self.bjp.prob_win_by_stand = (1.0 - w - t) * 100.0;
-                self.bjp.prob_bust = probability_busting(self.player1_hand_total, &remaining) * 100.0;
-                self.bjp.prob_next_blackjack = probability_next_blackjack(self.player1_hand_total, &remaining);
-                self.bjp.prob_tie = t * (100.0 as f64);
+                self.bjp.prob_dealer_wins = self.probability_dealer_win(
+                    self.player1_hand_total,
+                    &self.cards_remaining,
+                    self.dealer_hand_total,
+                ) * 100.0;
+
+                self.bjp.prob_win_by_stand = (1.0 - (self.bjp.prob_dealer_wins / 100.0)) * 100.0;
+                self.bjp.prob_bust = self.probability_busting(self.player1_hand_total) * 100.0;
             }
         }
     }
-  
+    fn probability_busting(&self, curr_hand: i32) -> f64 {
+        let bust_number = 21 - curr_hand;
+        let mut bust_cards_sum = 0;
+
+        for i in (bust_number + 1)..(self.cards_remaining.len() as i32) {
+            bust_cards_sum += self.cards_remaining[i as usize];
+        }
+
+        let cards_remaining_in_deck: i32 = self.cards_remaining.iter().sum();
+
+        bust_cards_sum as f64 / cards_remaining_in_deck as f64
+    }
+
+    fn probability_dealer_win(
+        &self,
+        curr_hand: i32,
+        card_counts: &Vec<i32>,
+        curr_dealer_hand: i32,
+    ) -> f64 {
+        let card_vals = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 10, 10, 10, 11];
+
+        if curr_dealer_hand > 21 {
+            return 0.0;
+        }
+        if curr_dealer_hand >= 17 && curr_dealer_hand <= 21 {
+            return if curr_dealer_hand > curr_hand {
+                1.0
+            } else {
+                0.0
+            };
+        }
+
+        let total_remaining_deck: i32 = card_counts.iter().sum();
+        let mut win_prob: f64 = 0.0;
+
+        for (i, &count) in card_counts.iter().enumerate() {
+            if count == 0 || i >= card_vals.len() {
+                continue;
+            }
+
+            let draw = card_vals[i];
+            let mut next_total_hand = curr_dealer_hand + draw;
+            if draw == 11 && next_total_hand > 21 {
+                next_total_hand -= 10;
+            }
+
+            let mut next_card_counts = card_counts.clone();
+            next_card_counts[i] -= 1;
+
+            let prob = count as f64 / total_remaining_deck as f64;
+            win_prob +=
+                prob * self.probability_dealer_win(curr_hand, &next_card_counts, next_total_hand);
+        }
+
+        win_prob
+    }
+
     fn show_reset_buttons(&mut self, ui: &mut egui::Ui) {
         ui.separator();
         ui.horizontal(|ui| {
