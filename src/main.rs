@@ -1437,7 +1437,10 @@ fn display_card(
         });
     }
 }
-
+//fn to return probability of busting 
+//ARGS
+//curr_hand - total curr hand
+//curr_count - vector of remaining deck 
 fn probability_busting(curr_hand: i32, card_counts: &Vec<i32>) -> f64 {
     let card_vals = [2, 3, 4, 5, 6, 7, 8, 9, 10, 10, 10, 10, 11];
     let total_remaining: i32 = card_counts.iter().sum();
@@ -1465,7 +1468,12 @@ fn probability_busting(curr_hand: i32, card_counts: &Vec<i32>) -> f64 {
 
     return (bust_prob);
 }
-
+//fn probability dealer_outcomes
+//Args
+//player total - total sum of player
+//dealer totoal - total sum of dealer
+//cards remaining - vector of cards remainin g
+//memoization - recomputes repeated weight prbability 
 fn probability_dealer_outcomes(
     player_total: i32,
     dealer_total: i32,
@@ -1520,7 +1528,10 @@ fn probability_dealer_outcomes(
     memo.insert(key, (win, tie));
     (win, tie)
 }
-
+//Function to return next_blackjack probability
+//Args
+//player total - current hand sum of player
+//cards_remaining - vector of decks 
 fn probability_next_blackjack(player_total: i32, cards_remaining: &Vec<i32>) -> f64 {
     let total_cards: i32 = cards_remaining.iter().sum();
     if total_cards == 0 || player_total >= 21 {
